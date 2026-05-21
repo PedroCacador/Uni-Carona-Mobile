@@ -3,6 +3,7 @@ export const colors = {
   background: '#ffffff',
   text: '#333333',
   textSecondary: '#666666',
+  textLight: '#AAAAAA',
   border: '#e0e0e0',
   error: '#FF453A',
   success: '#34c759',

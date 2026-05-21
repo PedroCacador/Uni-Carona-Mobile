@@ -4,8 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 
 import MapScreen from '../screens/MapScreen';
-import RidesScreen from '../screens/RidesScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import RidesScreen from '../screens/Rides';
+import ProfileScreen from '../screens/Profile';
 import type { MainTabParamList } from './types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
