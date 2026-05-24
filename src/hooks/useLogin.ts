@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
-import { AUTH_REQUEST_DELAY_MS } from '../constants/auth';
 import type { LoginFormErrors } from '../types/auth';
 import { validateLoginForm } from '../utils/validation';
+import api from '../services/api';
 
 export function useLogin(onSuccess?: () => void) {
   const [email, setEmail] = useState('');
@@ -28,13 +28,11 @@ export function useLogin(onSuccess?: () => void) {
     setIsLoading(true);
 
     try {
-      await new Promise<void>((resolve) =>
-        setTimeout(resolve, AUTH_REQUEST_DELAY_MS),
-      );
-      console.log('Login realizado');
+      const response = await api.post('/auth/login', { email, senha: password });
+      console.log('Login realizado', response.data);
       onSuccess?.();
-    } catch {
-      setErrors({ general: 'Não foi possível entrar. Tente novamente.' });
+    } catch (error: any) {
+      setErrors({ general: error.response?.data?.message || 'Não foi possível entrar. Verifique suas credenciais.' });
     } finally {
       setIsLoading(false);
     }
