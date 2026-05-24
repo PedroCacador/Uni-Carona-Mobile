@@ -11,6 +11,7 @@ import { mapsService, RouteResult, GeocodingResult } from '../../services/api';
 
 export default function MapScreen() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [city, setCity] = useState<string | undefined>();
   const [destination, setDestination] = useState<any>(null);
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [loadingRoute, setLoadingRoute] = useState(false);
@@ -30,6 +31,14 @@ export default function MapScreen() {
 
       let location = await Location.getCurrentPositionAsync({});
       setLocation(location);
+
+      let reverse = await Location.reverseGeocodeAsync({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      });
+      if (reverse && reverse.length > 0) {
+        setCity(reverse[0].city || reverse[0].subregion || undefined);
+      }
     })();
   }, []);
 
@@ -69,7 +78,8 @@ export default function MapScreen() {
           const results = await mapsService.searchPlaces(
             text,
             location?.coords.latitude,
-            location?.coords.longitude
+            location?.coords.longitude,
+            city
           );
           setSearchResults(results);
           setShowResults(true);

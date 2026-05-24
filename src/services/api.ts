@@ -1,9 +1,10 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://10.0.0.166:3333';
+const BASE_URL = 'http://10.0.0.214:3333';
 
 const api = axios.create({
   baseURL: BASE_URL,
+  timeout: 10000,
 });
 
 export interface GeocodingResult {
@@ -31,12 +32,13 @@ export const mapsService = {
     return response.data;
   },
 
-  searchPlaces: async (query: string, lat?: number, lng?: number): Promise<GeocodingResult[]> => {
+  searchPlaces: async (query: string, lat?: number, lon?: number, city?: string): Promise<GeocodingResult[]> => {
     const response = await api.get('/maps/search', {
       params: { 
         q: query,
         lat,
-        lng
+        lon,
+        city
       },
     });
     return response.data;
