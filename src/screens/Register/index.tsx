@@ -2,7 +2,6 @@ import React, { useCallback } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import {
-  AccountTypeSelector,
   AuthCheckbox,
   AuthHeroSection,
   AuthScreenLayout,
@@ -12,7 +11,6 @@ import {
 } from '../../components';
 import { useRegister } from '../../hooks/useRegister';
 import { useAuthNavigation } from '../../navigation/hooks';
-import type { AccountType } from '../../types/register';
 import { authLayoutStyles } from '../../styles/authLayout';
 import { styles } from './styles';
 
@@ -37,12 +35,14 @@ export default function RegisterScreen() {
     setUniversity,
     enrollmentId,
     setEnrollmentId,
+    cpf,
+    setCpf,
+    birthDate,
+    setBirthDate,
     password,
     setPassword,
     confirmPassword,
     setConfirmPassword,
-    accountType,
-    setAccountType,
     acceptedTerms,
     setAcceptedTerms,
     errors,
@@ -50,11 +50,6 @@ export default function RegisterScreen() {
     handleRegister,
     clearFieldError,
   } = useRegister(handleRegisterSuccess);
-
-  const handleAccountTypeChange = (type: AccountType) => {
-    setAccountType(type);
-    clearFieldError('accountType');
-  };
 
   const handleTermsToggle = (value: boolean) => {
     setAcceptedTerms(value);
@@ -95,12 +90,6 @@ export default function RegisterScreen() {
             {errors.general}
           </Text>
         )}
-
-        <AccountTypeSelector
-          value={accountType}
-          onChange={handleAccountTypeChange}
-          error={errors.accountType}
-        />
 
         <AuthTextField
           label="Nome completo"
@@ -163,6 +152,41 @@ export default function RegisterScreen() {
           optional
           returnKeyType="next"
           editable={!formDisabled}
+        />
+
+        <AuthTextField
+          label="CPF"
+          icon="hash"
+          placeholder="Apenas números"
+          value={cpf}
+          onChangeText={(text) => {
+            setCpf(text);
+            clearFieldError('cpf');
+          }}
+          error={errors.cpf}
+          keyboardType="numeric"
+          returnKeyType="next"
+          editable={!formDisabled}
+        />
+
+        <AuthTextField
+          label="Data de Nascimento"
+          icon="calendar"
+          placeholder="DD/MM/AAAA"
+          value={birthDate}
+          onChangeText={(text) => {
+            const cleaned = text.replace(/\D/g, '');
+            let masked = cleaned;
+            if (cleaned.length > 2) masked = `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
+            if (cleaned.length > 4) masked = `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}/${cleaned.slice(4, 8)}`;
+            setBirthDate(masked);
+            clearFieldError('birthDate');
+          }}
+          error={errors.birthDate}
+          keyboardType="numeric"
+          returnKeyType="next"
+          editable={!formDisabled}
+          maxLength={10}
         />
 
         <AuthTextField

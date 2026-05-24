@@ -1,4 +1,3 @@
-export { AccountTypeSelector } from './AccountTypeSelector';
 export { AuthCheckbox } from './AuthCheckbox';
 export type { AuthCheckboxProps } from './AuthCheckbox';
 export { AuthHeroSection } from './AuthHeroSection';

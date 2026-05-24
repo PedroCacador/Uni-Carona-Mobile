@@ -1,16 +1,18 @@
 import { useCallback, useState } from 'react';
-import { AUTH_REQUEST_DELAY_MS } from '../constants/auth';
-import type { AccountType, RegisterFormErrors } from '../types/register';
+import type { RegisterFormErrors } from '../types/register';
 import { validateRegisterForm } from '../utils/registerValidation';
+import api from '../services/api';
 
 export function useRegister(onSuccess?: () => void) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [university, setUniversity] = useState('');
   const [enrollmentId, setEnrollmentId] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [accountType, setAccountType] = useState<AccountType | null>(null);
+
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [errors, setErrors] = useState<RegisterFormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -29,9 +31,10 @@ export function useRegister(onSuccess?: () => void) {
       email,
       university,
       enrollmentId,
+      cpf,
+      birthDate,
       password,
       confirmPassword,
-      accountType,
       acceptedTerms,
     );
 
@@ -44,14 +47,24 @@ export function useRegister(onSuccess?: () => void) {
     setIsLoading(true);
 
     try {
-      await new Promise<void>((resolve) =>
-        setTimeout(resolve, AUTH_REQUEST_DELAY_MS),
-      );
-      console.log('Conta criada');
+      const [day, month, year] = birthDate.split('/').map(Number);
+      const dataNascimentoISO = new Date(year, month - 1, day).toISOString();
+
+      const payload = {
+        nome: name,
+        email,
+        senha: password,
+        curso: university,
+        cpf,
+        matricula: enrollmentId || undefined,
+        dataNascimento: dataNascimentoISO,
+      };
+      const response = await api.post('/usuarios', payload);
+      console.log('Conta criada', response.data);
       onSuccess?.();
-    } catch {
+    } catch (error: any) {
       setErrors({
-        general: 'Não foi possível criar a conta. Tente novamente.',
+        general: error.response?.data?.message || 'Não foi possível criar a conta. Verifique os dados e tente novamente.',
       });
     } finally {
       setIsLoading(false);
@@ -61,9 +74,10 @@ export function useRegister(onSuccess?: () => void) {
     email,
     university,
     enrollmentId,
+    cpf,
+    birthDate,
     password,
     confirmPassword,
-    accountType,
     acceptedTerms,
     onSuccess,
   ]);
@@ -77,12 +91,14 @@ export function useRegister(onSuccess?: () => void) {
     setUniversity,
     enrollmentId,
     setEnrollmentId,
+    cpf,
+    setCpf,
+    birthDate,
+    setBirthDate,
     password,
     setPassword,
     confirmPassword,
     setConfirmPassword,
-    accountType,
-    setAccountType,
     acceptedTerms,
     setAcceptedTerms,
     errors,
