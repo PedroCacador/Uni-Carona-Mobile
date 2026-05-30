@@ -9,6 +9,7 @@ import React, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AUTH_STORAGE_KEY = '@unicarona_auth';
+const USER_STORAGE_KEY = '@unicarona_user';
 
 interface AuthContextValue {
   isAuthenticated: boolean;
@@ -50,6 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     try {
       await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
+      await AsyncStorage.removeItem(USER_STORAGE_KEY);
       setIsAuthenticated(false);
     } catch (error) {
       console.error('Erro ao remover estado de autenticação', error);

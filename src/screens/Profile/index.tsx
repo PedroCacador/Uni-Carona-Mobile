@@ -1,681 +1,608 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  RefreshControl,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Modal,
-  Alert,
-  Image,
-  Platform,
+  View,
   useWindowDimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Feather, FontAwesome } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import api from '../../services/api';
+import { StatusCarona, type Carona, type Usuario } from '../../services/caronaApi';
 import { styles } from './styles';
 
-interface UserProfile {
+const USER_STORAGE_KEY = '@unicarona_user';
+
+type ReservaStatus = 'CONFIRMADA' | 'PENDENTE' | 'CANCELADA';
+
+interface Reserva {
+  id: string;
+  usuarioId: string;
+  caronaId: string;
+  status: ReservaStatus;
+  carona?: Carona;
+}
+
+type PerfilUsuario = Partial<Usuario> & {
   id: string;
   nome: string;
   email: string;
-  universidade: string;
-  matricula: string;
-  tipo: 'passageiro' | 'motorista';
-  avaliacaoMedia: number;
-  totalAvaliacoes: number;
-  dataCadastro: string;
-  telefone?: string;
-  bio?: string;
-  fotoPerfil?: string;
-}
+  curso?: string;
+};
 
-interface CaronaHistorico {
-  id: string;
-  origem: string;
-  destino: string;
-  data: string;
-  horario: string;
-  tipo: 'oferecida' | 'participante';
-  status: 'completa' | 'cancelada' | 'pendente';
-  vagas?: number;
-  preco: number;
-  motorista?: string;
-}
-
-interface Avaliacao {
-  id: number;
-  autor: string;
-  nota: number;
-  comentario: string;
-  data: string;
-  tipo: string;
-}
+const statusMap = {
+  CONFIRMADA: {
+    label: 'Confirmada',
+    icon: 'check-circle' as const,
+    wrapper: styles.statusConfirmada,
+    text: styles.statusConfirmadaText,
+  },
+  PENDENTE: {
+    label: 'Pendente',
+    icon: 'clock' as const,
+    wrapper: styles.statusPendente,
+    text: styles.statusPendenteText,
+  },
+  CANCELADA: {
+    label: 'Cancelada',
+    icon: 'x-circle' as const,
+    wrapper: styles.statusCancelada,
+    text: styles.statusCanceladaText,
+  },
+};
 
 const Perfil: React.FC = () => {
+  const navigation = useNavigation();
   const { width } = useWindowDimensions();
-  const isMobile = width < 768;
-  const isCompact = width < 420;
   const isTablet = width >= 768;
-  const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'dados' | 'historico' | 'avaliacoes'>('dados');
-  const [showModal, setShowModal] = useState(false);
-  const [modalMessage, setModalMessage] = useState({ type: '', title: '', message: '' });
-  
-  // Dados do perfil
-  const [profile, setProfile] = useState<UserProfile>({
-    id: '1',
-    nome: 'João Silva Santos',
-    email: 'joao.silva@universidade.edu.br',
-    universidade: 'Universidade Federal do Rio de Janeiro - UFRJ',
-    matricula: '2023123456',
-    tipo: 'motorista',
-    avaliacaoMedia: 4.8,
-    totalAvaliacoes: 24,
-    dataCadastro: '2024-01-15',
-    telefone: '(21) 98765-4321',
-    bio: 'Estudante de Engenharia Civil, apaixonado por caronas compartilhadas e sustentabilidade. Sempre busco oferecer viagens seguras e agradáveis! 🚗✨'
-  });
 
-  const [editData, setEditData] = useState({
-    nome: profile.nome,
-    telefone: profile.telefone || '',
-    bio: profile.bio || '',
-    universidade: profile.universidade,
-    matricula: profile.matricula
-  });
+  const [user, setUser] = useState<PerfilUsuario | null>(null);
+  const [reservas, setReservas] = useState<Reserva[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Histórico de caronas
-  const [historico] = useState<CaronaHistorico[]>([
-    {
-      id: '1',
-      origem: 'Copacabana',
-      destino: 'UFRJ - Cidade Universitária',
-      data: '2024-01-20',
-      horario: '07:30',
-      tipo: 'oferecida',
-      status: 'completa',
-      vagas: 3,
-      preco: 12
-    },
-    {
-      id: '2',
-      origem: 'Barra da Tijuca',
-      destino: 'UFRJ - Praia Vermelha',
-      data: '2024-01-18',
-      horario: '08:00',
-      tipo: 'participante',
-      status: 'completa',
-      preco: 15,
-      motorista: 'Maria Oliveira'
-    },
-    {
-      id: '3',
-      origem: 'Centro',
-      destino: 'UFRJ - Cidade Universitária',
-      data: '2024-01-25',
-      horario: '13:00',
-      tipo: 'oferecida',
-      status: 'pendente',
-      vagas: 2,
-      preco: 10
+  const [avaliarModalAberto, setAvaliarModalAberto] = useState(false);
+  const [reservaParaAvaliar, setReservaParaAvaliar] = useState<Reserva | null>(null);
+  const [nota, setNota] = useState(0);
+  const [comentario, setComentario] = useState('');
+  const [enviandoAvaliacao, setEnviandoAvaliacao] = useState(false);
+
+  const [editModalAberto, setEditModalAberto] = useState(false);
+  const [editNome, setEditNome] = useState('');
+  const [editCurso, setEditCurso] = useState('');
+  const [senhaAtual, setSenhaAtual] = useState('');
+  const [novaSenha, setNovaSenha] = useState('');
+  const [confirmarNovaSenha, setConfirmarNovaSenha] = useState('');
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [erroEdicao, setErroEdicao] = useState('');
+
+  const initials = useMemo(() => {
+    if (!user?.nome) return 'UC';
+
+    return user.nome
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((name) => name[0])
+      .join('')
+      .toUpperCase();
+  }, [user?.nome]);
+
+  const carregarReservas = useCallback(async (usuarioId: string) => {
+    try {
+      const response = await api.get<Reserva[]>(`/reservas/usuario/${usuarioId}`);
+      setReservas([...response.data].reverse());
+    } catch (error) {
+      console.error('Erro ao buscar reservas', error);
+      setReservas([]);
     }
-  ]);
-
-  // Avaliações recebidas
-  const [avaliacoes] = useState<Avaliacao[]>([
-    {
-      id: 1,
-      autor: 'Ana Beatriz',
-      nota: 5,
-      comentario: 'Motorista super pontual e educado! Recomendo demais 🚗✨',
-      data: '2024-01-20',
-      tipo: 'passageiro'
-    },
-    {
-      id: 2,
-      autor: 'Carlos Eduardo',
-      nota: 4.5,
-      comentario: 'Ótima viagem, carro confortável e conversa agradável.',
-      data: '2024-01-15',
-      tipo: 'passageiro'
-    },
-    {
-      id: 3,
-      autor: 'Fernanda Lima',
-      nota: 5,
-      comentario: 'Excelente motorista, muito atencioso com os passageiros!',
-      data: '2024-01-10',
-      tipo: 'passageiro'
-    }
-  ]);
-
-  useEffect(() => {
-    const loadProfile = async () => {
-      setIsLoading(true);
-      setTimeout(() => {
-        setIsLoading(false);
-      }, 500);
-    };
-    loadProfile();
   }, []);
 
-  const handleEdit = () => {
-    setEditData({
-      nome: profile.nome,
-      telefone: profile.telefone || '',
-      bio: profile.bio || '',
-      universidade: profile.universidade,
-      matricula: profile.matricula
-    });
-    setIsEditing(true);
+  const carregarPerfil = useCallback(async () => {
+    try {
+      const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
+
+      if (!storedUser) {
+        setUser(null);
+        return;
+      }
+
+      const parsedUser = JSON.parse(storedUser) as PerfilUsuario;
+      setUser(parsedUser);
+      await carregarReservas(parsedUser.id);
+    } catch (error) {
+      console.error('Erro ao carregar perfil', error);
+      setUser(null);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [carregarReservas]);
+
+  useEffect(() => {
+    carregarPerfil();
+  }, [carregarPerfil]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    carregarPerfil();
   };
 
-  const handleSave = async () => {
-    setIsLoading(true);
-    
-    setTimeout(() => {
-      setProfile({
-        ...profile,
-        nome: editData.nome,
-        telefone: editData.telefone,
-        bio: editData.bio,
-        universidade: editData.universidade,
-        matricula: editData.matricula
+  const abrirModalAvaliacao = (reserva: Reserva) => {
+    setReservaParaAvaliar(reserva);
+    setNota(0);
+    setComentario('');
+    setAvaliarModalAberto(true);
+  };
+
+  const enviarAvaliacao = async () => {
+    if (!reservaParaAvaliar || !user || !reservaParaAvaliar.carona?.motoristaId) return;
+
+    if (nota === 0) {
+      Alert.alert('Avaliação', 'Por favor, dê uma nota de 1 a 5 estrelas.');
+      return;
+    }
+
+    setEnviandoAvaliacao(true);
+    try {
+      await api.post('/reservas/avaliar-motorista', {
+        caronaId: reservaParaAvaliar.caronaId,
+        passageiroId: user.id,
+        motoristaId: reservaParaAvaliar.carona.motoristaId,
+        nota,
+        comentario,
       });
-      setIsEditing(false);
-      setIsLoading(false);
-      
-      setModalMessage({
-        type: 'success',
-        title: 'Perfil atualizado!',
-        message: 'Suas informações foram salvas com sucesso.'
-      });
-      setShowModal(true);
-      
-      setTimeout(() => setShowModal(false), 3000);
-    }, 1000);
-  };
-
-  const handleCancel = () => {
-    setIsEditing(false);
-  };
-
-  const getStatusConfig = (status: string) => {
-    switch(status) {
-      case 'completa':
-        return { icon: '✅', color: '#10b981', text: 'Completa' };
-      case 'cancelada':
-        return { icon: '❌', color: '#ef4444', text: 'Cancelada' };
-      default:
-        return { icon: '⚠️', color: '#f59e0b', text: 'Pendente' };
+      Alert.alert('Obrigado!', 'Avaliação enviada com sucesso.');
+      setAvaliarModalAberto(false);
+    } catch (error: any) {
+      Alert.alert('Erro', error.response?.data?.message || 'Erro ao enviar avaliação.');
+    } finally {
+      setEnviandoAvaliacao(false);
     }
   };
 
-  const renderStars = (rating: number) => {
-    const stars = [];
-    const fullStars = Math.floor(rating);
-    const hasHalfStar = rating % 1 !== 0;
-    
-    for (let i = 0; i < fullStars; i++) {
-      stars.push(<Text key={`full-${i}`} style={styles.starFilled}>★</Text>);
-    }
-    if (hasHalfStar) {
-      stars.push(<Text key="half" style={styles.starHalf}>½</Text>);
-    }
-    const remainingStars = 5 - Math.ceil(rating);
-    for (let i = 0; i < remainingStars; i++) {
-      stars.push(<Text key={`empty-${i}`} style={styles.starEmpty}>☆</Text>);
-    }
-    return stars;
+  const abrirModalEdicao = () => {
+    if (!user) return;
+
+    setEditNome(user.nome);
+    setEditCurso(user.curso || '');
+    setSenhaAtual('');
+    setNovaSenha('');
+    setConfirmarNovaSenha('');
+    setErroEdicao('');
+    setEditModalAberto(true);
   };
 
-  const renderTabContent = () => {
-    switch(activeTab) {
-      case 'dados':
-        return renderDadosTab();
-      case 'historico':
-        return renderHistoricoTab();
-      case 'avaliacoes':
-        return renderAvaliacoesTab();
-      default:
-        return null;
+  const salvarEdicao = async () => {
+    if (!user) return;
+
+    setErroEdicao('');
+    if (!editNome.trim()) {
+      setErroEdicao('O nome não pode ser vazio.');
+      return;
+    }
+
+    if (novaSenha) {
+      if (novaSenha !== confirmarNovaSenha) {
+        setErroEdicao('A nova senha e a confirmação não conferem.');
+        return;
+      }
+      if (!senhaAtual) {
+        setErroEdicao('Para alterar a senha, digite a senha atual.');
+        return;
+      }
+    }
+
+    setSalvandoEdicao(true);
+    try {
+      if (novaSenha) {
+        await api.post('/auth/login', { email: user.email, senha: senhaAtual });
+      }
+
+      const payload: { nome: string; curso: string; senha?: string } = {
+        nome: editNome.trim(),
+        curso: editCurso.trim(),
+      };
+
+      if (novaSenha) payload.senha = novaSenha;
+
+      const response = await api.put<PerfilUsuario>(`/usuarios/${user.id}`, payload);
+      const updatedUser = { ...user, ...response.data, ...payload };
+
+      setUser(updatedUser);
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+      Alert.alert('Perfil atualizado!', 'Suas informações foram salvas com sucesso.');
+      setEditModalAberto(false);
+    } catch (error: any) {
+      setErroEdicao(error.response?.data?.message || 'Erro ao atualizar informações.');
+    } finally {
+      setSalvandoEdicao(false);
     }
   };
 
-  const renderDadosTab = () => {
-    return (
-      <View style={[styles.infoGrid, isTablet && styles.infoGridWide]}>
-        <View style={[styles.infoCard, isTablet && styles.infoCardWide]}>
-          <View style={styles.infoIcon}>
-            <Text style={styles.infoIconText}>📧</Text>
-          </View>
-          <View style={styles.infoContent}>
-            <Text style={styles.infoLabel}>E-mail</Text>
-            <Text style={styles.infoValue}>{profile.email}</Text>
-          </View>
-        </View>
-        <View style={[styles.infoCard, isTablet && styles.infoCardWide]}>
-          <View style={styles.infoIcon}>
-            <Text style={styles.infoIconText}>📚</Text>
-          </View>
-          <View style={styles.infoContent}>
-            <Text style={styles.infoLabel}>Universidade</Text>
-            <Text style={styles.infoValue}>{profile.universidade}</Text>
-          </View>
-        </View>
-        <View style={[styles.infoCard, isTablet && styles.infoCardWide]}>
-          <View style={styles.infoIcon}>
-            <Text style={styles.infoIconText}>🎓</Text>
-          </View>
-          <View style={styles.infoContent}>
-            <Text style={styles.infoLabel}>Matrícula</Text>
-            <Text style={styles.infoValue}>{profile.matricula}</Text>
-          </View>
-        </View>
-        <View style={[styles.infoCard, isTablet && styles.infoCardWide]}>
-          <View style={styles.infoIcon}>
-            <Text style={styles.infoIconText}>🔒</Text>
-          </View>
-          <View style={styles.infoContent}>
-            <Text style={styles.infoLabel}>Senha</Text>
-            <Text style={styles.infoValue}>********</Text>
-            <TouchableOpacity onPress={() => Alert.alert('Alterar senha', 'Funcionalidade em breve')}>
-              <Text style={styles.changePasswordBtn}>Alterar senha</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
+  const irParaCaronas = () => {
+    (navigation as any).navigate('Caronas');
   };
 
-  const renderHistoricoTab = () => {
-    if (historico.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>🚗</Text>
-          <Text style={styles.emptyTitle}>Nenhuma carona encontrada</Text>
-          <Text style={styles.emptySubtitle}>Você ainda não participou de nenhuma carona</Text>
-        </View>
-      );
-    }
+  const renderReserva = (reserva: Reserva) => {
+    const carona = reserva.carona;
+    const status = statusMap[reserva.status] ?? statusMap.PENDENTE;
+    const isFinalizada = carona?.status === StatusCarona.FINALIZADA;
+    const dataSaida = carona?.dataHoraSaida ? new Date(carona.dataHoraSaida) : null;
 
     return (
-      <View style={[styles.historicoContainer, isTablet && styles.historicoContainerWide]}>
-        {historico.map(carona => {
-          const statusConfig = getStatusConfig(carona.status);
-          return (
-            <View
-              key={carona.id}
-              style={[styles.historicoCard, isTablet && styles.historicoCardWide]}
-            >
-              <View style={styles.historicoHeader}>
-                <View style={[
-                  styles.historicoType,
-                  carona.tipo === 'oferecida' ? styles.historicoTypeOferecida : styles.historicoTypeParticipante
-                ]}>
-                  <Text>{carona.tipo === 'oferecida' ? '🚗' : '👥'}</Text>
-                  <Text style={styles.historicoTypeText}>
-                    {carona.tipo === 'oferecida' ? 'Oferecida' : 'Participante'}
-                  </Text>
-                </View>
-                <View style={styles.historicoStatus}>
-                  <Text>{statusConfig.icon}</Text>
-                  <Text style={[styles.historicoStatusText, { color: statusConfig.color }]}>
-                    {statusConfig.text}
-                  </Text>
-                </View>
-              </View>
-              
-              <View style={styles.historicoBody}>
-                <View style={styles.historicoRoute}>
-                  <View style={styles.routePoint}>
-                    <View style={styles.routeDotOrigin} />
-                    <View>
-                      <Text style={styles.routeLabel}>Origem</Text>
-                      <Text style={styles.routeText}>{carona.origem}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.routeLine} />
-                  <View style={styles.routePoint}>
-                    <View style={styles.routeDotDestiny} />
-                    <View>
-                      <Text style={styles.routeLabel}>Destino</Text>
-                      <Text style={styles.routeText}>{carona.destino}</Text>
-                    </View>
-                  </View>
-                </View>
-                
-                <View style={styles.historicoDetails}>
-                  <View style={styles.detailItem}>
-                    <Text>📅</Text>
-                    <Text style={styles.detailText}>
-                      {new Date(carona.data).toLocaleDateString('pt-BR')}
-                    </Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Text>📍</Text>
-                    <Text style={styles.detailText}>{carona.horario}</Text>
-                  </View>
-                  <View style={styles.detailItem}>
-                    <Text style={styles.priceText}>R$ {carona.preco}</Text>
-                  </View>
-                </View>
-                
-                {carona.tipo === 'participante' && carona.motorista && (
-                  <View style={styles.historicoMotorista}>
-                    <Text>👤</Text>
-                    <Text style={styles.motoristaText}>Motorista: {carona.motorista}</Text>
-                  </View>
-                )}
-                
-                {carona.tipo === 'oferecida' && carona.vagas && (
-                  <View style={styles.historicoVagas}>
-                    <Text>👥</Text>
-                    <Text style={styles.vagasText}>{carona.vagas} vagas disponíveis</Text>
-                  </View>
-                )}
-              </View>
-              
-              <TouchableOpacity 
-                style={styles.historicoButton}
-                onPress={() => Alert.alert('Detalhes', `Detalhes da carona ${carona.id}`)}
-              >
-                <Text style={styles.historicoButtonText}>Ver detalhes</Text>
-              </TouchableOpacity>
+      <View key={reserva.id} style={[styles.reservaCard, isTablet && styles.reservaCardWide]}>
+        <View style={styles.reservaHeader}>
+          <View style={[styles.statusBadge, status.wrapper]}>
+            <Feather name={status.icon} size={13} style={status.text} />
+            <Text style={[styles.statusText, status.text]}>{status.label}</Text>
+          </View>
+
+          {isFinalizada ? (
+            <View style={styles.finalizadaBadge}>
+              <Text style={styles.finalizadaText}>Viagem Finalizada</Text>
             </View>
-          );
-        })}
-        
-        <TouchableOpacity
-          style={[styles.verMaisButton, isTablet && styles.verMaisButtonWide]}
-        >
-          <Text>+</Text>
-          <Text style={styles.verMaisText}>Carregar mais</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
+          ) : null}
+        </View>
 
-  const renderAvaliacoesTab = () => {
-    return (
-      <View style={styles.avaliacoesContainer}>
-        <View style={[styles.avaliacoesSummary, isTablet && styles.avaliacoesSummaryWide]}>
-          <View style={[styles.summaryScore, isTablet && styles.summaryScoreWide]}>
-            <Text style={styles.summaryScoreNumber}>{profile.avaliacaoMedia}</Text>
-            <View style={styles.summaryStars}>
-              {renderStars(profile.avaliacaoMedia)}
-            </View>
-            <Text style={styles.summaryTotal}>
-              {profile.totalAvaliacoes} avaliações
+        <View style={styles.routeBox}>
+          <View style={styles.routeTimeline}>
+            <View style={styles.originDot} />
+            <View style={styles.routeLine} />
+            <View style={styles.destinationDot} />
+          </View>
+
+          <View style={styles.routeTexts}>
+            <Text style={styles.routeOrigin} numberOfLines={1}>
+              {carona?.origem || 'Origem'}
+            </Text>
+            <Text style={styles.routeDestination} numberOfLines={1}>
+              {carona?.destino || 'Destino'}
             </Text>
           </View>
-          <View style={styles.summaryBreakdown}>
-            {[5,4,3,2,1].map(star => {
-              const count = avaliacoes.filter(a => Math.floor(a.nota) === star).length;
-              const percentage = (count / profile.totalAvaliacoes) * 100;
-              return (
-                <View key={star} style={styles.breakdownRow}>
-                  <Text style={styles.breakdownLabel}>{star} estrelas</Text>
-                  <View style={styles.breakdownBar}>
-                    <View style={[styles.breakdownFill, { width: `${percentage}%` }]} />
-                  </View>
-                  <Text style={styles.breakdownCount}>{count}</Text>
-                </View>
-              );
-            })}
+        </View>
+
+        <View style={styles.reservaDetails}>
+          <View style={styles.detailItem}>
+            <Feather name="calendar" size={14} color="#64748B" />
+            <Text style={styles.detailText}>
+              {dataSaida ? dataSaida.toLocaleDateString('pt-BR') : '--/--/----'}
+            </Text>
+          </View>
+
+          <View style={styles.detailItem}>
+            <Feather name="clock" size={14} color="#64748B" />
+            <Text style={styles.detailText}>
+              {dataSaida
+                ? dataSaida.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                : '--:--'}
+            </Text>
           </View>
         </View>
-        
-        <View style={styles.avaliacoesList}>
-          {avaliacoes.map(avaliacao => (
-            <View key={avaliacao.id} style={styles.avaliacaoCard}>
-              <View style={styles.avaliacaoHeader}>
-                <View style={styles.avaliacaoAutor}>
-                  <View style={styles.avaliacaoAvatar}>
-                    <Text style={styles.avaliacaoAvatarText}>
-                      {avaliacao.autor.charAt(0)}
-                    </Text>
-                  </View>
-                  <View>
-                    <Text style={styles.avaliacaoNome}>{avaliacao.autor}</Text>
-                    <View style={styles.avaliacaoStars}>
-                      {renderStars(avaliacao.nota)}
-                    </View>
-                  </View>
-                </View>
-                <Text style={styles.avaliacaoData}>
-                  {new Date(avaliacao.data).toLocaleDateString('pt-BR')}
-                </Text>
-              </View>
-              <Text style={styles.avaliacaoComentario}>
-                "{avaliacao.comentario}"
-              </Text>
-            </View>
-          ))}
-        </View>
+
+        {isFinalizada && reserva.status !== 'CANCELADA' ? (
+          <TouchableOpacity
+            style={styles.avaliarButton}
+            onPress={() => abrirModalAvaliacao(reserva)}
+            activeOpacity={0.82}
+          >
+            <Feather name="star" size={17} color="#0A44B1" />
+            <Text style={styles.avaliarButtonText}>Avaliar Motorista</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     );
   };
 
+  if (loading) {
+    return (
+      <View style={styles.centerScreen}>
+        <ActivityIndicator size="large" color="#0A44B1" />
+        <Text style={styles.loadingText}>Carregando seu perfil...</Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View style={styles.centerScreen}>
+        <View style={styles.loggedOutCard}>
+          <View style={styles.loggedOutIcon}>
+            <Feather name="user" size={30} color="#0A44B1" />
+          </View>
+          <Text style={styles.loggedOutTitle}>Ops, você não está logado!</Text>
+          <Text style={styles.loggedOutText}>
+            Faça login para acessar suas informações e reservas.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
-    <ScrollView
-      style={styles.wrapper}
-      contentContainerStyle={[
-        styles.contentContainer,
-        isCompact && styles.contentContainerCompact,
-        isTablet && styles.contentContainerWide,
-      ]}
-    >
-      {/* Modal de Notificação */}
+    <View style={styles.screen}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.hero}>
+          <View style={styles.heroCircle} />
+          <View style={styles.heroPattern} />
+          <View style={styles.heroInner}>
+            <Text style={styles.heroTitle}>Meu Perfil</Text>
+            <Text style={styles.heroSubtitle}>Gerencie suas viagens e informações.</Text>
+          </View>
+        </View>
+
+        <View style={styles.content}>
+          <View style={[styles.profileCard, isTablet && styles.profileCardWide]}>
+            <View style={styles.profileMain}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initials}</Text>
+              </View>
+
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>{user.nome}</Text>
+                <View style={styles.profileMeta}>
+                  <View style={styles.metaRow}>
+                    <Feather name="mail" size={14} color="#0A44B1" />
+                    <Text style={styles.metaText} numberOfLines={1}>
+                      {user.email}
+                    </Text>
+                  </View>
+                  <View style={styles.metaRow}>
+                    <Feather name="book-open" size={14} color="#0A44B1" />
+                    <Text style={styles.metaText} numberOfLines={1}>
+                      {user.curso || 'Curso não informado'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.editButton} onPress={abrirModalEdicao} activeOpacity={0.82}>
+              <Feather name="edit-3" size={16} color="#475569" />
+              <Text style={styles.editButtonText}>Editar Informações</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.sectionTitle}>Minhas Reservas</Text>
+
+          {reservas.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIcon}>
+                <Feather name="map-pin" size={25} color="#CBD5E1" />
+              </View>
+              <Text style={styles.emptyTitle}>Nenhuma reserva encontrada</Text>
+              <Text style={styles.emptyText}>
+                Você ainda não reservou nenhuma carona. Que tal buscar a sua primeira viagem?
+              </Text>
+              <TouchableOpacity style={styles.buscarButton} onPress={irParaCaronas} activeOpacity={0.82}>
+                <Text style={styles.buscarButtonText}>Buscar Caronas</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={[styles.reservasGrid, isTablet && styles.reservasGridWide]}>
+              {reservas.map(renderReserva)}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
       <Modal
-        visible={showModal}
+        visible={avaliarModalAberto}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowModal(false)}
+        onRequestClose={() => !enviandoAvaliacao && setAvaliarModalAberto(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={[
-              styles.modalIcon,
-              modalMessage.type === 'success' ? styles.modalIconSuccess : styles.modalIconError
-            ]}>
-              <Text style={styles.modalIconText}>
-                {modalMessage.type === 'success' ? '✅' : '⚠️'}
-              </Text>
+          <View style={styles.ratingModal}>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setAvaliarModalAberto(false)}
+              disabled={enviandoAvaliacao}
+            >
+              <Feather name="x" size={21} color="#94A3B8" />
+            </TouchableOpacity>
+
+            <View style={styles.ratingIcon}>
+              <FontAwesome name="star" size={30} color="#E8EE3B" />
             </View>
-            <Text style={styles.modalTitle}>{modalMessage.title}</Text>
-            <Text style={styles.modalMessage}>{modalMessage.message}</Text>
+            <Text style={styles.modalTitle}>Como foi a viagem?</Text>
+            <Text style={styles.modalDescription}>
+              Avalie o motorista para ajudar a manter a qualidade da comunidade.
+            </Text>
+
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity key={star} onPress={() => setNota(star)} activeOpacity={0.7}>
+                  <FontAwesome
+                    name="star"
+                    size={38}
+                    color={nota >= star ? '#E8EE3B' : '#E2E8F0'}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              placeholder="Deixe um comentário (opcional)..."
+              placeholderTextColor="#94A3B8"
+              value={comentario}
+              onChangeText={setComentario}
+              multiline
+              style={styles.commentInput}
+              textAlignVertical="top"
+            />
+
+            <TouchableOpacity
+              style={[styles.primaryModalButton, nota === 0 && styles.buttonDisabled]}
+              onPress={enviarAvaliacao}
+              disabled={enviandoAvaliacao || nota === 0}
+              activeOpacity={0.82}
+            >
+              {enviandoAvaliacao ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.primaryModalButtonText}>Enviar Avaliação</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      <View style={styles.container}>
-        {/* Header do Perfil */}
-        <View style={[styles.profileHeader, isTablet && styles.profileHeaderWide]}>
-          <View style={[styles.avatarWrapper, isTablet && styles.avatarWrapperWide]}>
-            {profile.fotoPerfil ? (
-              <Image source={{ uri: profile.fotoPerfil }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarPlaceholderText}>👤</Text>
+      <Modal
+        visible={editModalAberto}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !salvandoEdicao && setEditModalAberto(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModal}>
+            <View style={styles.editModalHeader}>
+              <View style={styles.editModalTitleRow}>
+                <Feather name="edit-3" size={18} color="#0A44B1" />
+                <Text style={styles.editModalTitle}>Editar Perfil</Text>
               </View>
-            )}
-            <TouchableOpacity
-              style={[styles.changePhotoBtn, isEditing && styles.changePhotoBtnActive]}
-              onPress={handleEdit}
-              disabled={isEditing}
-              accessibilityRole="button"
-              accessibilityLabel="Editar perfil"
-            >
-              <Text style={styles.changePhotoBtnText}>✏️</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <View style={styles.profileInfo}>
-            {!isEditing ? (
-              <>
-                <View style={[styles.nameRow, isCompact && styles.nameRowCompact]}>
-                  <Text style={[styles.name, isCompact && styles.nameCompact]}>
-                    {profile.nome}
-                  </Text>
+              <TouchableOpacity onPress={() => setEditModalAberto(false)} disabled={salvandoEdicao}>
+                <Feather name="x" size={21} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.editModalBody} showsVerticalScrollIndicator={false}>
+              {erroEdicao ? (
+                <View style={styles.errorBox}>
+                  <Feather name="alert-circle" size={16} color="#DC2626" />
+                  <Text style={styles.errorText}>{erroEdicao}</Text>
                 </View>
-                <View style={styles.badgeGroup}>
-                  <View style={[
-                    styles.badge,
-                    profile.tipo === 'motorista' ? styles.badgeMotorista : styles.badgePassageiro
-                  ]}>
-                    <Text>{profile.tipo === 'motorista' ? '🚗' : '👤'}</Text>
-                    <Text style={styles.badgeText}>
-                      {profile.tipo === 'motorista' ? 'Motorista' : 'Passageiro'}
-                    </Text>
-                  </View>
-                  <View style={styles.badge}>
-                    <Text>📅</Text>
-                    <Text style={styles.badgeText}>
-                      Desde {new Date(profile.dataCadastro).toLocaleDateString('pt-BR')}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.ratingWrapper}>
-                  {renderStars(profile.avaliacaoMedia)}
-                  <Text style={styles.ratingValue}>{profile.avaliacaoMedia}</Text>
-                  <Text style={styles.ratingCount}>({profile.totalAvaliacoes} avaliações)</Text>
-                </View>
-                {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
-              </>
-            ) : (
-              <View style={styles.editForm}>
-                <View style={[styles.formRow, isMobile && styles.formRowMobile]}>
-                  <View style={styles.formField}>
-                    <Text style={styles.formLabel}>Nome completo</Text>
-                    <TextInput
-                      value={editData.nome}
-                      onChangeText={(text) => setEditData({...editData, nome: text})}
-                      style={styles.formInput}
-                      placeholderTextColor="#94a3b8"
-                    />
-                  </View>
-                  <View style={styles.formField}>
-                    <Text style={styles.formLabel}>Telefone</Text>
-                    <TextInput
-                      value={editData.telefone}
-                      onChangeText={(text) => setEditData({...editData, telefone: text})}
-                      style={styles.formInput}
-                      keyboardType="phone-pad"
-                      placeholderTextColor="#94a3b8"
-                    />
-                  </View>
-                </View>
-                <View style={styles.formField}>
-                  <Text style={styles.formLabel}>Universidade</Text>
+              ) : null}
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Nome Completo</Text>
+                <View style={styles.inputWrapper}>
+                  <Feather name="user" size={17} color="#94A3B8" />
                   <TextInput
-                    value={editData.universidade}
-                    onChangeText={(text) => setEditData({...editData, universidade: text})}
-                    style={styles.formInput}
-                    placeholderTextColor="#94a3b8"
+                    value={editNome}
+                    onChangeText={setEditNome}
+                    editable={!salvandoEdicao}
+                    style={styles.textInput}
+                    placeholderTextColor="#94A3B8"
                   />
                 </View>
-                <View style={[styles.formRow, isMobile && styles.formRowMobile]}>
-                  <View style={styles.formField}>
-                    <Text style={styles.formLabel}>Matrícula</Text>
-                    <TextInput
-                      value={editData.matricula}
-                      onChangeText={(text) => setEditData({...editData, matricula: text})}
-                      style={styles.formInput}
-                      placeholderTextColor="#94a3b8"
-                    />
-                  </View>
-                </View>
-                <View style={styles.formField}>
-                  <Text style={styles.formLabel}>Biografia</Text>
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Curso / Universidade</Text>
+                <View style={styles.inputWrapper}>
+                  <Feather name="book-open" size={17} color="#94A3B8" />
                   <TextInput
-                    value={editData.bio}
-                    onChangeText={(text) => setEditData({...editData, bio: text})}
-                    style={[styles.formInput, styles.formTextarea]}
-                    multiline
-                    numberOfLines={3}
-                    textAlignVertical="top"
-                    placeholderTextColor="#94a3b8"
+                    value={editCurso}
+                    onChangeText={setEditCurso}
+                    editable={!salvandoEdicao}
+                    style={styles.textInput}
+                    placeholderTextColor="#94A3B8"
                   />
                 </View>
-                <View style={[styles.editActions, isCompact && styles.editActionsCompact]}>
-                  <TouchableOpacity onPress={handleSave} style={styles.saveButton} disabled={isLoading}>
-                    {isLoading ? (
-                      <ActivityIndicator color="white" size="small" />
-                    ) : (
-                      <>
-                        <Text>💾</Text>
-                        <Text style={styles.saveButtonText}>Salvar</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={handleCancel} style={styles.cancelButton}>
-                    <Text style={styles.cancelButtonText}>Cancelar</Text>
-                  </TouchableOpacity>
-                </View>
               </View>
-            )}
+
+              <View style={styles.divider} />
+
+              <View style={styles.passwordTitleRow}>
+                <Feather name="lock" size={16} color="#0A44B1" />
+                <Text style={styles.passwordTitle}>Alterar Senha</Text>
+                <Text style={styles.optionalText}>(Opcional)</Text>
+              </View>
+
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Nova Senha</Text>
+                <TextInput
+                  value={novaSenha}
+                  onChangeText={setNovaSenha}
+                  editable={!salvandoEdicao}
+                  secureTextEntry
+                  placeholder="Digite apenas se quiser alterar"
+                  placeholderTextColor="#94A3B8"
+                  style={styles.passwordInput}
+                />
+              </View>
+
+              {novaSenha ? (
+                <>
+                  <View style={styles.formField}>
+                    <Text style={styles.formLabel}>Confirmar Nova Senha</Text>
+                    <View style={styles.passwordWrapper}>
+                      <TextInput
+                        value={confirmarNovaSenha}
+                        onChangeText={setConfirmarNovaSenha}
+                        editable={!salvandoEdicao}
+                        secureTextEntry={!mostrarConfirmarSenha}
+                        placeholder="Repita a nova senha"
+                        placeholderTextColor="#94A3B8"
+                        style={styles.passwordInput}
+                      />
+                      <TouchableOpacity
+                        style={styles.passwordEyeButton}
+                        onPress={() => setMostrarConfirmarSenha((value) => !value)}
+                        disabled={salvandoEdicao}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          mostrarConfirmarSenha
+                            ? 'Ocultar confirmaÃ§Ã£o da senha'
+                            : 'Mostrar confirmaÃ§Ã£o da senha'
+                        }
+                      >
+                        <Feather
+                          name={mostrarConfirmarSenha ? 'eye-off' : 'eye'}
+                          size={19}
+                          color="#94A3B8"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.formField}>
+                    <Text style={styles.formLabel}>Senha Atual</Text>
+                    <TextInput
+                      value={senhaAtual}
+                      onChangeText={setSenhaAtual}
+                      editable={!salvandoEdicao}
+                      secureTextEntry
+                      placeholder="Obrigatória para salvar a nova senha"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.passwordInput}
+                    />
+                  </View>
+                </>
+              ) : null}
+            </ScrollView>
+
+            <View style={styles.editModalFooter}>
+              <TouchableOpacity
+                style={styles.saveChangesButton}
+                onPress={salvarEdicao}
+                disabled={salvandoEdicao}
+                activeOpacity={0.82}
+              >
+                {salvandoEdicao ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveChangesText}>Salvar Alterações</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-
-        {/* Tabs de Navegação */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.tabsScroll}
-          contentContainerStyle={[
-            styles.tabsContainer,
-            isTablet && styles.tabsContainerWide,
-          ]}
-        >
-          <TouchableOpacity
-            onPress={() => setActiveTab('dados')}
-            style={[
-              styles.tabButton,
-              isCompact && styles.tabButtonCompact,
-              activeTab === 'dados' && styles.tabButtonActive,
-            ]}
-          >
-            <Text>👤</Text>
-            <Text style={[styles.tabButtonText, activeTab === 'dados' && styles.tabButtonTextActive]}>
-              Dados Pessoais
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setActiveTab('historico')}
-            style={[
-              styles.tabButton,
-              isCompact && styles.tabButtonCompact,
-              activeTab === 'historico' && styles.tabButtonActive,
-            ]}
-          >
-            <Text>📅</Text>
-            <Text style={[styles.tabButtonText, activeTab === 'historico' && styles.tabButtonTextActive]}>
-              Histórico
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setActiveTab('avaliacoes')}
-            style={[
-              styles.tabButton,
-              isCompact && styles.tabButtonCompact,
-              activeTab === 'avaliacoes' && styles.tabButtonActive,
-            ]}
-          >
-            <Text>⭐</Text>
-            <Text style={[styles.tabButtonText, activeTab === 'avaliacoes' && styles.tabButtonTextActive]}>
-              Avaliações
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-
-        {/* Conteúdo das Tabs */}
-        <View style={styles.tabContent}>
-          {renderTabContent()}
-        </View>
-      </View>
-    </ScrollView>
+      </Modal>
+    </View>
   );
 };
 

@@ -1,268 +1,428 @@
-import { StyleSheet, Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { theme } from '../../theme';
 
-const { colors, spacing, typography, radius } = theme;
+const { spacing, typography } = theme;
+
+const blue = '#0A44B1';
+const surface = '#FAFAF7';
+const slate900 = '#0F172A';
+const slate800 = '#1E293B';
+const slate600 = '#475569';
+const slate500 = '#64748B';
+const slate400 = '#94A3B8';
+const slate200 = '#E2E8F0';
+const neutral100 = '#F5F5F0';
+const emerald50 = '#ECFDF5';
+const emerald100 = '#D1FAE5';
+const emerald500 = '#10B981';
+const emerald700 = '#047857';
+const red50 = '#FEF2F2';
+const red100 = '#FEE2E2';
+const red200 = '#FECACA';
+const red500 = '#EF4444';
+const red600 = '#DC2626';
 
 export const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(229, 229, 223, 0.9)',
+    borderRadius: 24,
+    borderWidth: 2,
     marginBottom: spacing.md,
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.06,
+        shadowRadius: 16,
       },
       android: {
-        elevation: 4,
+        elevation: 3,
       },
     }),
   },
 
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-    gap: spacing.sm,
+  cardDisponivel: {
+    borderColor: 'rgba(10, 68, 177, 0.18)',
   },
 
-  motoristaInfo: {
+  accentBar: {
+    backgroundColor: 'transparent',
+    height: 4,
+    width: '100%',
+  },
+
+  accentBarActive: {
+    backgroundColor: blue,
+  },
+
+  content: {
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+
+  header: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+
+  driverBlock: {
+    alignItems: 'center',
     flex: 1,
-    marginRight: spacing.md,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    minWidth: 0,
+  },
+
+  avatar: {
+    alignItems: 'center',
+    backgroundColor: blue,
+    borderRadius: 16,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+    ...Platform.select({
+      ios: {
+        shadowColor: blue,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: typography.weights.bold,
+  },
+
+  driverText: {
+    flex: 1,
+    minWidth: 0,
   },
 
   motoristaNome: {
-    fontSize: typography.sizes.lg,
+    color: slate900,
+    fontSize: 15,
     fontWeight: typography.weights.bold,
-    color: colors.text,
-    marginBottom: spacing.xs,
+    lineHeight: 20,
   },
 
   universidade: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-
-  avaliacaoEstrelas: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  estrelaCheia: {
-    fontSize: typography.sizes.md,
-    color: '#FFD700',
-  },
-
-  estrelaVazia: {
-    fontSize: typography.sizes.md,
-    color: colors.textLight,
-  },
-
-  avaliacaoTexto: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    marginLeft: spacing.xs,
-  },
-
-  vagasBadge: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.pill,
-  },
-
-  vagasBadgeDisponivel: {
-    backgroundColor: colors.success + '20',
-  },
-
-  vagasBadgeIndisponivel: {
-    backgroundColor: colors.error + '20',
-  },
-
-  vagasBadgeText: {
-    fontSize: typography.sizes.sm,
+    color: blue,
+    fontSize: 12,
     fontWeight: typography.weights.bold,
-  },
-
-  vagasBadgeTextDisponivel: {
-    color: colors.success,
-  },
-
-  vagasBadgeTextIndisponivel: {
-    color: colors.error,
-  },
-
-  rota: {
-    marginBottom: spacing.md,
-  },
-
-  rotaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  ponto: {
-    width: 12,
-    height: 12,
-    borderRadius: radius.pill,
-    marginRight: spacing.sm,
-  },
-
-  pontoVerde: {
-    backgroundColor: colors.success,
-  },
-
-  pontoVermelho: {
-    backgroundColor: colors.error,
-  },
-
-  rotaTexto: {
-    fontSize: typography.sizes.md,
-    color: colors.text,
-    flex: 1,
-  },
-
-  rotaLabel: {
-    fontWeight: typography.weights.bold,
-  },
-
-  linhaContainer: {
-    paddingLeft: 5,
-    marginVertical: spacing.xs,
-  },
-
-  linhaDivisor: {
-    width: 2,
-    height: 16,
-    backgroundColor: colors.border,
-  },
-
-  dataHora: {
-    flexDirection: 'row',
-    marginBottom: spacing.md,
-    gap: spacing.lg,
-    flexWrap: 'wrap',
-  },
-
-  dataHoraItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  dataHoraIcon: {
-    fontSize: typography.sizes.md,
-    marginRight: spacing.xs,
-  },
-
-  dataHoraTexto: {
-    fontSize: typography.sizes.md,
-    color: colors.text,
-  },
-
-  observacoes: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: spacing.md,
-    padding: spacing.sm,
-    backgroundColor: colors.textLight + '10',
-    borderRadius: radius.sm,
-  },
-
-  observacoesIcon: {
-    fontSize: typography.sizes.md,
-    marginRight: spacing.xs,
     marginTop: 2,
   },
 
-  observacoesTexto: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    flex: 1,
-  },
-
-  statusCancelado: {
-    flexDirection: 'row',
+  avaliacao: {
     alignItems: 'center',
-    marginBottom: spacing.md,
-    padding: spacing.sm,
-    backgroundColor: colors.error + '10',
-    borderRadius: radius.sm,
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 4,
   },
 
-  statusCanceladoIcon: {
-    fontSize: typography.sizes.md,
-    marginRight: spacing.xs,
+  estrelas: {
+    flexDirection: 'row',
+    gap: 1,
   },
 
-  statusCanceladoTexto: {
-    fontSize: typography.sizes.sm,
-    color: colors.error,
+  avaliacaoTexto: {
+    color: slate400,
+    fontSize: 11,
+    fontWeight: typography.weights.medium,
+  },
+
+  statusBadge: {
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+
+  statusText: {
+    fontSize: 12,
     fontWeight: typography.weights.bold,
   },
 
-  precoVagas: {
+  statusDot: {
+    borderRadius: 999,
+    height: 6,
+    width: 6,
+  },
+
+  statusAtiva: {
+    backgroundColor: emerald50,
+    borderColor: emerald100,
+  },
+
+  statusAtivaText: {
+    color: emerald700,
+  },
+
+  statusAtivaDot: {
+    backgroundColor: emerald500,
+  },
+
+  statusCompleta: {
+    backgroundColor: '#F1F5F9',
+    borderColor: slate200,
+  },
+
+  statusCompletaText: {
+    color: slate500,
+  },
+
+  statusCompletaDot: {
+    backgroundColor: slate400,
+  },
+
+  statusCancelada: {
+    backgroundColor: red50,
+    borderColor: red200,
+  },
+
+  statusCanceladaText: {
+    color: red600,
+  },
+
+  statusCanceladaDot: {
+    backgroundColor: red500,
+  },
+
+  rotaBox: {
+    backgroundColor: surface,
+    borderColor: neutral100,
+    borderRadius: 16,
+    borderWidth: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginBottom: spacing.md,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+  },
+
+  rotaTimeline: {
+    alignItems: 'center',
+    paddingTop: 5,
+  },
+
+  origemDot: {
+    backgroundColor: emerald500,
+    borderColor: '#FFFFFF',
+    borderRadius: 999,
+    borderWidth: 2,
+    height: 11,
+    width: 11,
+  },
+
+  rotaLine: {
+    backgroundColor: '#D4D4D0',
+    height: 22,
+    marginVertical: 4,
+    width: 1,
+  },
+
+  rotaTexts: {
+    flex: 1,
+    gap: 10,
+    minWidth: 0,
+  },
+
+  rotaLabel: {
+    color: slate400,
+    fontSize: 10,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+
+  rotaOrigem: {
+    color: slate800,
+    fontSize: 14,
+    fontWeight: typography.weights.bold,
+    marginTop: 2,
+  },
+
+  rotaDestino: {
+    color: blue,
+    fontSize: 14,
+    fontWeight: typography.weights.bold,
+    marginTop: 2,
+  },
+
+  infoGrid: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+
+  infoChip: {
+    alignItems: 'center',
+    backgroundColor: surface,
+    borderColor: neutral100,
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    gap: 6,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: 6,
+    paddingVertical: 10,
+  },
+
+  infoText: {
+    color: slate500,
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    lineHeight: 14,
+    textAlign: 'center',
+  },
+
+  vagasChip: {
+    backgroundColor: emerald50,
+    borderColor: emerald100,
+  },
+
+  vagasChipDisponivel: {
+    backgroundColor: emerald50,
+    borderColor: emerald100,
+  },
+
+  vagasChipIndisponivel: {
+    backgroundColor: red50,
+    borderColor: red100,
+  },
+
+  vagasChipSemHorario: {
+    flex: 2,
+  },
+
+  vagasText: {
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    lineHeight: 14,
+    textAlign: 'center',
+  },
+
+  vagasTextDisponivel: {
+    color: emerald700,
+  },
+
+  vagasTextIndisponivel: {
+    color: red600,
+  },
+
+  observacoes: {
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(10, 68, 177, 0.04)',
+    borderColor: 'rgba(10, 68, 177, 0.1)',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 10,
+  },
+
+  observacoesTexto: {
+    color: slate600,
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
+  canceladoBox: {
+    alignItems: 'center',
+    backgroundColor: red50,
+    borderColor: red200,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 10,
+  },
+
+  canceladoTexto: {
+    color: red500,
+    fontSize: 12,
+    fontWeight: typography.weights.bold,
+  },
+
+  footer: {
+    alignItems: 'center',
+    borderTopColor: neutral100,
+    borderTopWidth: 1,
+    flexDirection: 'row',
     gap: spacing.md,
-    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingTop: spacing.md,
+  },
+
+  precoBlock: {
+    flex: 1,
+    minWidth: 0,
   },
 
   precoLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    color: slate400,
+    fontSize: 11,
+    fontWeight: typography.weights.medium,
+    marginBottom: 2,
   },
 
   preco: {
-    fontSize: typography.sizes.xl,
+    color: blue,
+    fontSize: 25,
     fontWeight: typography.weights.bold,
-    color: colors.primary,
-  },
-
-  vagasContainer: {
-    alignItems: 'flex-end',
-    flexShrink: 0,
-  },
-
-  vagasLabel: {
-    fontSize: typography.sizes.sm,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-  },
-
-  vagasRestantesContainer: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    backgroundColor: colors.primary + '10',
-    borderRadius: radius.pill,
-  },
-
-  vagasRestantes: {
-    fontSize: typography.sizes.lg,
-    fontWeight: typography.weights.bold,
-    color: colors.primary,
+    lineHeight: 30,
   },
 
   button: {
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
     alignItems: 'center',
+    backgroundColor: blue,
+    borderRadius: 16,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: blue,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
 
   buttonDisabled: {
-    backgroundColor: colors.textLight,
+    backgroundColor: '#F1F5F9',
+    elevation: 0,
+    shadowOpacity: 0,
   },
 
   buttonText: {
-    fontSize: typography.sizes.md,
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: typography.weights.bold,
-    color: colors.white,
+  },
+
+  buttonTextDisabled: {
+    color: slate400,
   },
 });

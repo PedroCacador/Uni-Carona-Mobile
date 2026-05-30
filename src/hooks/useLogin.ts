@@ -1,7 +1,10 @@
 import { useCallback, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { LoginFormErrors } from '../types/auth';
 import { validateLoginForm } from '../utils/validation';
 import api from '../services/api';
+
+const USER_STORAGE_KEY = '@unicarona_user';
 
 export function useLogin(onSuccess?: () => void) {
   const [email, setEmail] = useState('');
@@ -30,6 +33,10 @@ export function useLogin(onSuccess?: () => void) {
     try {
       const response = await api.post('/auth/login', { email, senha: password });
       console.log('Login realizado', response.data);
+      const usuario = response.data?.usuario ?? response.data?.user ?? response.data;
+      if (usuario?.id) {
+        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(usuario));
+      }
       onSuccess?.();
     } catch (error: any) {
       setErrors({ general: error.response?.data?.message || 'Não foi possível entrar. Verifique suas credenciais.' });
