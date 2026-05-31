@@ -1,0 +1,49 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "FAMINAS (Faculdade de Minas)",
+        "address": "Av. Cristiano Ferreira Varella, 655 - Universitário, Muriaé - MG"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-42.3488, -21.1445]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "IF Sudeste MG - Campus Muriaé",
+        "address": "Av. Coronel Monteiro de Castro, 550 - Barra, Muriaé - MG"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-42.3615, -21.1235]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Faculdade Santa Marcelina (FASM)",
+        "address": "Praça Irmã Annina Bisegna, 40 - Centro, Muriaé - MG"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-42.3653, -21.1278]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "UNIPAC Muriaé",
+        "address": "R. Dr. Lídio Bandeira de Melo, 490 - Barra, Muriaé - MG"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-42.3787, -21.1264]
+      }
+    }
+  ]
+}
