@@ -14,7 +14,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 import CardCarona, { type Carona } from '../../components/CardCarona';
-import api from '../../services/api';
+import api, { mapsService } from '../../services/api';
 import {
   caronaApi,
   StatusCarona,
@@ -22,6 +22,7 @@ import {
   type CaronaFilters,
 } from '../../services/caronaApi';
 import { styles } from './styles';
+import institutionsGeoJSON from '../../constants/muriae-institutions.json';
 
 const USER_STORAGE_KEY = '@unicarona_user';
 
@@ -44,6 +45,25 @@ const ListagemCaronas: React.FC = () => {
 
   const [selectedCarona, setSelectedCarona] = useState<Carona | null>(null);
   const [reservaLoading, setReservaLoading] = useState(false);
+
+  // Estado para Criar/Oferecer Carona
+  const [oferecerModalAberto, setOferecerModalAberto] = useState(false);
+  const [oferecerOrigem, setOferecerOrigem] = useState('');
+  const [oferecerDestino, setOferecerDestino] = useState('');
+  const [oferecerData, setOferecerData] = useState('');
+  const [oferecerHora, setOferecerHora] = useState('');
+  const [oferecerVagas, setOferecerVagas] = useState(4);
+  const [oferecerValor, setOferecerValor] = useState('5.00');
+  const [oferecerLoading, setOferecerLoading] = useState(false);
+
+  // Lista de faculdades locais para seleção no formulário
+  const [showOrigemList, setShowOrigemList] = useState(false);
+  const [showDestinoList, setShowDestinoList] = useState(false);
+  const [oferecerOrigemResults, setOferecerOrigemResults] = useState<any[]>([]);
+  const [oferecerOrigemSearching, setOferecerOrigemSearching] = useState(false);
+  const [oferecerOrigemTimer, setOferecerOrigemTimer] = useState<NodeJS.Timeout | null>(null);
+  const [oferecerDestinoResults, setOferecerDestinoResults] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const temFiltrosAtivos = Boolean(origem || destino || data || apenasComVagas);
 
@@ -80,7 +100,7 @@ const ListagemCaronas: React.FC = () => {
         return {
           id: caronaApi.id,
           motorista: {
-            id: caronaApi.motoristaId,
+            id: caronaApi.motorista?.id ?? caronaApi.motoristaId,
             nome: caronaApi.motorista?.nome ?? 'Desconhecido',
             universidade: caronaApi.motorista?.curso ?? 'Faminas',
             avaliacao: (caronaApi.motorista as any)?.mediaAvaliacao ?? 5,
@@ -119,6 +139,16 @@ const ListagemCaronas: React.FC = () => {
   };
 
   useEffect(() => {
+    const loadUser = async () => {
+      const userStr = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      if (userStr) {
+        setCurrentUser(JSON.parse(userStr));
+      }
+    };
+    loadUser();
+  }, []);
+
+  useEffect(() => {
     buscarCaronas();
   }, [origem, destino, data, apenasComVagas]);
 
@@ -141,9 +171,15 @@ const ListagemCaronas: React.FC = () => {
       return;
     }
 
+    const user = JSON.parse(userStr);
+    const isOwnRide = selectedCarona.motorista.id === user.id;
+    if (isOwnRide) {
+      Alert.alert('Ação inválida', 'Você não pode reservar sua própria carona.');
+      return;
+    }
+
     setReservaLoading(true);
     try {
-      const user = JSON.parse(userStr);
       await api.post('/reservas', {
         caronaId: selectedCarona.id,
         usuarioId: user.id,
@@ -156,6 +192,199 @@ const ListagemCaronas: React.FC = () => {
       Alert.alert('Erro', error.response?.data?.message || 'Erro ao realizar reserva.');
     } finally {
       setReservaLoading(false);
+    }
+  };
+
+  const handleOferecerDataChange = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 8);
+    const day = digits.slice(0, 2);
+    const month = digits.slice(2, 4);
+    const year = digits.slice(4, 8);
+
+    if (digits.length <= 2) {
+      setOferecerData(day);
+      return;
+    }
+
+    if (digits.length <= 4) {
+      setOferecerData(`${day}-${month}`);
+      return;
+    }
+
+    setOferecerData(`${day}-${month}-${year}`);
+  };
+
+  const handleOferecerHoraChange = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 4);
+    const hours = digits.slice(0, 2);
+    const minutes = digits.slice(2, 4);
+
+    if (digits.length <= 2) {
+      setOferecerHora(hours);
+      return;
+    }
+
+    setOferecerHora(`${hours}:${minutes}`);
+  };
+
+  const handleOferecerOrigemSearch = (text: string) => {
+    setOferecerOrigem(text);
+
+    if (oferecerOrigemTimer) clearTimeout(oferecerOrigemTimer);
+
+    if (text.trim().length > 1) {
+      // 1. Local filter GeoJSON for institutions
+      const query = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const localMatches = institutionsGeoJSON.features
+        .filter(feature => {
+          const name = feature.properties.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const address = feature.properties.address.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          return name.includes(query) || address.includes(query);
+        })
+        .map(feature => ({
+          address: `🎓 ${feature.properties.name}`,
+          fullAddress: feature.properties.address
+        }));
+
+      setOferecerOrigemResults(localMatches);
+      setShowOrigemList(true);
+
+      // 2. Remote search for other points
+      setOferecerOrigemSearching(true);
+      const timer = setTimeout(async () => {
+        try {
+          const results = await mapsService.searchPlaces(
+            text,
+            undefined,
+            undefined,
+            'Muriaé'
+          );
+
+          const remoteMatches = results.map((item: any) => ({
+            address: item.address,
+            fullAddress: item.address
+          }));
+
+          setOferecerOrigemResults([...localMatches, ...remoteMatches]);
+        } catch (error) {
+          console.error('Erro ao buscar endereços de origem:', error);
+        } finally {
+          setOferecerOrigemSearching(false);
+        }
+      }, 400);
+
+      setOferecerOrigemTimer(timer);
+    } else {
+      setOferecerOrigemResults([]);
+      setShowOrigemList(false);
+    }
+  };
+
+  const handleOferecerDestinoSearch = (text: string) => {
+    setOferecerDestino(text);
+
+    if (text.trim().length > 1) {
+      // Strict local filter from institutions ONLY
+      const query = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const filtered = institutionsGeoJSON.features
+        .filter(feature => {
+          const name = feature.properties.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const address = feature.properties.address.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          return name.includes(query) || address.includes(query);
+        })
+        .map(feature => ({
+          address: `🎓 ${feature.properties.name}`,
+          fullAddress: feature.properties.address
+        }));
+      setOferecerDestinoResults(filtered);
+      setShowDestinoList(true);
+    } else {
+      setOferecerDestinoResults([]);
+      setShowDestinoList(false);
+    }
+  };
+
+  const handleOferecerCarona = async () => {
+    if (!oferecerOrigem.trim() || !oferecerDestino.trim()) {
+      Alert.alert('Campos obrigatórios', 'Por favor, informe a origem e o destino da carona.');
+      return;
+    }
+
+    if (oferecerData.length !== 10) {
+      Alert.alert('Data inválida', 'A data deve estar no formato DD-MM-AAAA.');
+      return;
+    }
+
+    if (oferecerHora.length !== 5) {
+      Alert.alert('Horário inválido', 'O horário de saída deve estar no formato HH:MM.');
+      return;
+    }
+
+    const userStr = await AsyncStorage.getItem(USER_STORAGE_KEY);
+    if (!userStr) {
+      Alert.alert('Login necessário', 'Você precisa estar logado para oferecer uma carona.');
+      return;
+    }
+
+    const user = JSON.parse(userStr);
+
+    // Parse Date and Time
+    const [day, month, year] = oferecerData.split('-');
+    const [hours, minutes] = oferecerHora.split(':');
+    const departureDate = new Date(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes));
+
+    if (isNaN(departureDate.getTime()) || departureDate <= new Date()) {
+      Alert.alert('Data e hora inválidas', 'A data e hora de saída devem ser futuras.');
+      return;
+    }
+
+    setOferecerLoading(true);
+    try {
+      let veiculoId = '';
+      try {
+        const vResponse = await api.get(`/veiculos/motorista/${user.id}`);
+        veiculoId = vResponse.data.id;
+      } catch (err: any) {
+        if (err.response?.status === 404 || err.message?.includes('Nenhum veículo') || err.response?.data?.message?.includes('Nenhum veículo')) {
+          const createVResponse = await api.post('/veiculos', {
+            placa: 'UNI-' + Math.floor(1000 + Math.random() * 9000),
+            marca: 'Volkswagen',
+            modelo: 'Gol',
+            cor: 'Branco',
+            proprietarioId: user.id
+          });
+          veiculoId = createVResponse.data.id;
+        } else {
+          throw err;
+        }
+      }
+
+      await caronaApi.create({
+        motoristaId: user.id,
+        veiculoId,
+        origem: oferecerOrigem.replace(/^🎓\s*/, '').trim(),
+        destino: oferecerDestino.replace(/^🎓\s*/, '').trim(),
+        dataHoraSaida: departureDate.toISOString(),
+        assentosDisponiveis: oferecerVagas,
+        valorAjuda: Number(oferecerValor)
+      });
+
+      Alert.alert('Sucesso!', 'Sua carona foi cadastrada e está disponível na lista.');
+
+      setOferecerOrigem('');
+      setOferecerDestino('');
+      setOferecerData('');
+      setOferecerHora('');
+      setOferecerVagas(4);
+      setOferecerValor('5.00');
+      setOferecerModalAberto(false);
+
+      buscarCaronas();
+    } catch (error: any) {
+      console.error('Erro ao cadastrar carona:', error);
+      Alert.alert('Erro ao oferecer carona', error.response?.data?.message || 'Não foi possível cadastrar sua carona.');
+    } finally {
+      setOferecerLoading(false);
     }
   };
 
@@ -441,6 +670,16 @@ const ListagemCaronas: React.FC = () => {
         </View>
       </ScrollView>
 
+      {/* FAB Button */}
+      <TouchableOpacity
+        style={styles.fabButton}
+        onPress={() => setOferecerModalAberto(true)}
+        activeOpacity={0.82}
+      >
+        <Feather name="plus" size={20} color="#FFFFFF" />
+        <Text style={styles.fabButtonText}>Oferecer</Text>
+      </TouchableOpacity>
+
       <Modal
         visible={Boolean(selectedCarona)}
         transparent
@@ -548,31 +787,236 @@ const ListagemCaronas: React.FC = () => {
               </ScrollView>
 
               <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={[
-                    styles.reserveButton,
-                    (reservaLoading || !selectedCarona.vagas) && styles.reserveButtonDisabled,
-                  ]}
-                  onPress={handleReservar}
-                  disabled={reservaLoading || !selectedCarona.vagas}
-                  activeOpacity={0.82}
-                >
-                  {reservaLoading ? (
-                    <>
-                      <ActivityIndicator color="#FFFFFF" size="small" />
-                      <Text style={styles.reserveButtonText}>Processando reserva...</Text>
-                    </>
-                  ) : (
-                    <Text style={styles.reserveButtonText}>Reservar Carona</Text>
-                  )}
-                </TouchableOpacity>
-                <Text style={styles.modalFooterNote}>
-                  Você será notificado assim que o motorista confirmar.
-                </Text>
+                {currentUser?.id === selectedCarona.motorista.id ? (
+                  <View style={[styles.reserveButton, styles.reserveButtonDisabled]}>
+                    <Text style={styles.reserveButtonText}>Sua Carona (Como Motorista)</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.reserveButton,
+                      (reservaLoading || !selectedCarona.vagas) && styles.reserveButtonDisabled,
+                    ]}
+                    onPress={handleReservar}
+                    disabled={reservaLoading || !selectedCarona.vagas}
+                    activeOpacity={0.82}
+                  >
+                    {reservaLoading ? (
+                      <>
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                        <Text style={styles.reserveButtonText}>Processando reserva...</Text>
+                      </>
+                    ) : (
+                      <Text style={styles.reserveButtonText}>Reservar Carona</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+                {currentUser?.id !== selectedCarona.motorista.id && (
+                  <Text style={styles.modalFooterNote}>
+                    Você será notificado assim que o motorista confirmar.
+                  </Text>
+                )}
               </View>
             </View>
           </View>
         ) : null}
+      </Modal>
+
+      {/* Modal Oferecer Carona */}
+      <Modal
+        visible={oferecerModalAberto}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !oferecerLoading && setOferecerModalAberto(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.oferecerModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Oferecer Carona</Text>
+              <TouchableOpacity
+                style={styles.modalClose}
+                onPress={() => setOferecerModalAberto(false)}
+                disabled={oferecerLoading}
+              >
+                <Feather name="x" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {/* Origem */}
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Origem</Text>
+                <View style={styles.formInputWrapper}>
+                  <Feather name="map-pin" size={16} color="#94A3B8" />
+                  <TextInput
+                    placeholder="De onde você está saindo?"
+                    placeholderTextColor="#94A3B8"
+                    value={oferecerOrigem}
+                    onChangeText={handleOferecerOrigemSearch}
+                    style={styles.formInput}
+                    editable={!oferecerLoading}
+                  />
+                  {oferecerOrigem ? (
+                    <TouchableOpacity onPress={() => { setOferecerOrigem(''); setShowOrigemList(false); }}>
+                      <Feather name="x" size={15} color="#94A3B8" />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {oferecerOrigemSearching && (
+                  <ActivityIndicator size="small" color="#0A44B1" style={{ marginTop: 5, alignSelf: 'flex-start' }} />
+                )}
+                {showOrigemList && oferecerOrigemResults.length > 0 && (
+                  <ScrollView style={styles.institutionsScroll} nestedScrollEnabled>
+                    {oferecerOrigemResults.map((item, idx) => (
+                      <TouchableOpacity
+                        key={idx}
+                        style={styles.institutionSelectItem}
+                        onPress={() => {
+                          setOferecerOrigem(item.address);
+                          setShowOrigemList(false);
+                        }}
+                      >
+                        <Text style={styles.institutionSelectText}>{item.address}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+
+              {/* Destino */}
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Destino</Text>
+                <View style={styles.formInputWrapper}>
+                  <Feather name="map-pin" size={16} color="#94A3B8" />
+                  <TextInput
+                    placeholder="Para onde você vai?"
+                    placeholderTextColor="#94A3B8"
+                    value={oferecerDestino}
+                    onChangeText={handleOferecerDestinoSearch}
+                    style={styles.formInput}
+                    editable={!oferecerLoading}
+                  />
+                  {oferecerDestino ? (
+                    <TouchableOpacity onPress={() => { setOferecerDestino(''); setShowDestinoList(false); }}>
+                      <Feather name="x" size={15} color="#94A3B8" />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                {showDestinoList && oferecerDestinoResults.length > 0 && (
+                  <ScrollView style={styles.institutionsScroll} nestedScrollEnabled>
+                    {oferecerDestinoResults.map((item, idx) => (
+                      <TouchableOpacity
+                        key={idx}
+                        style={styles.institutionSelectItem}
+                        onPress={() => {
+                          setOferecerDestino(item.address);
+                          setShowDestinoList(false);
+                        }}
+                      >
+                        <Text style={styles.institutionSelectText}>{item.address}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+
+              {/* Data e Hora */}
+              <View style={[styles.pickerRow, { marginBottom: 16 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.formLabel}>Data de Saída</Text>
+                  <View style={styles.formInputWrapper}>
+                    <Feather name="calendar" size={16} color="#94A3B8" />
+                    <TextInput
+                      placeholder="DD-MM-AAAA"
+                      placeholderTextColor="#94A3B8"
+                      value={oferecerData}
+                      onChangeText={handleOferecerDataChange}
+                      maxLength={10}
+                      keyboardType="number-pad"
+                      style={styles.formInput}
+                      editable={!oferecerLoading}
+                    />
+                  </View>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.formLabel}>Horário</Text>
+                  <View style={styles.formInputWrapper}>
+                    <Feather name="clock" size={16} color="#94A3B8" />
+                    <TextInput
+                      placeholder="HH:MM"
+                      placeholderTextColor="#94A3B8"
+                      value={oferecerHora}
+                      onChangeText={handleOferecerHoraChange}
+                      maxLength={5}
+                      keyboardType="number-pad"
+                      style={styles.formInput}
+                      editable={!oferecerLoading}
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* Assentos Disponíveis */}
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Assentos Disponíveis</Text>
+                <View style={styles.pickerRow}>
+                  {[1, 2, 3, 4].map((v) => (
+                    <TouchableOpacity
+                      key={v}
+                      style={[styles.pickerButton, oferecerVagas === v && styles.pickerButtonActive]}
+                      onPress={() => setOferecerVagas(v)}
+                      disabled={oferecerLoading}
+                    >
+                      <Text style={[styles.pickerButtonText, oferecerVagas === v && styles.pickerButtonTextActive]}>
+                        {v} {v === 1 ? 'vaga' : 'vagas'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Ajuda de Custo */}
+              <View style={styles.formField}>
+                <Text style={styles.formLabel}>Ajuda de Custo (R$)</Text>
+                <View style={styles.formInputWrapper}>
+                  <FontAwesome name="money" size={16} color="#94A3B8" />
+                  <TextInput
+                    placeholder="5.00"
+                    placeholderTextColor="#94A3B8"
+                    value={oferecerValor}
+                    onChangeText={setOferecerValor}
+                    keyboardType="decimal-pad"
+                    style={styles.formInput}
+                    editable={!oferecerLoading}
+                  />
+                </View>
+              </View>
+
+              {/* Ações */}
+              <TouchableOpacity
+                style={[styles.formSubmitButton, oferecerLoading && styles.reserveButtonDisabled]}
+                onPress={handleOferecerCarona}
+                disabled={oferecerLoading}
+                activeOpacity={0.82}
+              >
+                {oferecerLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.formSubmitButtonText}>Cadastrar Carona</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.formCancelButton}
+                onPress={() => setOferecerModalAberto(false)}
+                disabled={oferecerLoading}
+                activeOpacity={0.82}
+              >
+                <Text style={styles.formCancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </View>
   );
