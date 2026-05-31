@@ -16,6 +16,7 @@ import { Feather, FontAwesome } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import api from '../../services/api';
 import { StatusCarona, type Carona, type Usuario } from '../../services/caronaApi';
+import { useAuth } from '../../contexts/AuthContext';
 import { styles } from './styles';
 
 const USER_STORAGE_KEY = '@unicarona_user';
@@ -60,6 +61,7 @@ const statusMap = {
 
 const Perfil: React.FC = () => {
   const navigation = useNavigation();
+  const { signOut } = useAuth();
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
 
@@ -80,8 +82,16 @@ const Perfil: React.FC = () => {
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarNovaSenha, setConfirmarNovaSenha] = useState('');
+  const [mostrarConfirmarSenha, setMostrarConfirmarSenha] = useState(false);
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
   const [erroEdicao, setErroEdicao] = useState('');
+
+  // States for managing offered rides and approval requests
+  const [activeTab, setActiveTab] = useState<'PASSAGEIRO' | 'MOTORISTA'>('PASSAGEIRO');
+  const [caronasOferecidas, setCaronasOferecidas] = useState<any[]>([]);
+  const [reservasDasCaronas, setReservasDasCaronas] = useState<Record<string, Reserva[]>>({});
+  const [loadingCaronas, setLoadingCaronas] = useState(false);
+  const [decidingReservaId, setDecidingReservaId] = useState<string | null>(null);
 
   const initials = useMemo(() => {
     if (!user?.nome) return 'UC';
@@ -105,6 +115,34 @@ const Perfil: React.FC = () => {
     }
   }, []);
 
+  const carregarCaronasOferecidas = useCallback(async (usuarioId: string) => {
+    setLoadingCaronas(true);
+    try {
+      const response = await api.get<any[]>(`/carona/motorista/${usuarioId}`);
+      const rides = [...response.data].reverse();
+      setCaronasOferecidas(rides);
+
+      const reservationsMap: Record<string, Reserva[]> = {};
+      await Promise.all(
+        rides.map(async (ride) => {
+          try {
+            const res = await api.get<Reserva[]>(`/reservas/carona/${ride.id}`);
+            reservationsMap[ride.id] = res.data;
+          } catch (err) {
+            console.error(`Erro ao carregar reservas da carona ${ride.id}:`, err);
+            reservationsMap[ride.id] = [];
+          }
+        })
+      );
+      setReservasDasCaronas(reservationsMap);
+    } catch (error) {
+      console.error('Erro ao carregar caronas oferecidas:', error);
+      setCaronasOferecidas([]);
+    } finally {
+      setLoadingCaronas(false);
+    }
+  }, []);
+
   const carregarPerfil = useCallback(async () => {
     try {
       const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
@@ -116,7 +154,10 @@ const Perfil: React.FC = () => {
 
       const parsedUser = JSON.parse(storedUser) as PerfilUsuario;
       setUser(parsedUser);
-      await carregarReservas(parsedUser.id);
+      await Promise.all([
+        carregarReservas(parsedUser.id),
+        carregarCaronasOferecidas(parsedUser.id)
+      ]);
     } catch (error) {
       console.error('Erro ao carregar perfil', error);
       setUser(null);
@@ -124,7 +165,7 @@ const Perfil: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [carregarReservas]);
+  }, [carregarReservas, carregarCaronasOferecidas]);
 
   useEffect(() => {
     carregarPerfil();
@@ -229,6 +270,155 @@ const Perfil: React.FC = () => {
 
   const irParaCaronas = () => {
     (navigation as any).navigate('Caronas');
+  };
+
+  const handleDecidirReserva = async (reservaId: string, caronaId: string, novoStatus: 'CONFIRMADA' | 'CANCELADA') => {
+    setDecidingReservaId(reservaId);
+    try {
+      await api.patch(`/reservas/${reservaId}/status`, { status: novoStatus });
+      
+      Alert.alert(
+        'Sucesso!', 
+        novoStatus === 'CONFIRMADA' ? 'Solicitação aprovada com sucesso!' : 'Solicitação recusada com sucesso.'
+      );
+      
+      if (user) {
+        await carregarCaronasOferecidas(user.id);
+      }
+    } catch (error: any) {
+      console.error('Erro ao decidir status da reserva:', error);
+      Alert.alert('Erro', error.response?.data?.message || 'Não foi possível atualizar a solicitação.');
+    } finally {
+      setDecidingReservaId(null);
+    }
+  };
+
+  const renderCaronaOferecida = (carona: any) => {
+    const dataSaida = carona.dataHoraSaida ? new Date(carona.dataHoraSaida) : null;
+    const requests = (reservasDasCaronas[carona.id] || []).filter(
+      (res: any) => res.usuarioId !== carona.motoristaId && res.usuarioId !== carona.motorista?.id
+    );
+
+    return (
+      <View key={carona.id} style={[styles.reservaCard, isTablet && styles.reservaCardWide]}>
+        <View style={styles.reservaHeader}>
+          <View style={styles.driverRideHeaderLeft}>
+            <Feather name="navigation" size={14} color="#0A44B1" />
+            <Text style={styles.driverRideHeaderTitle}>Carona Oferecida</Text>
+          </View>
+          <View style={styles.vagasBadge}>
+            <Text style={styles.vagasBadgeText}>
+              {carona.assentosDisponiveis} vagas livres
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.routeBox}>
+          <View style={styles.routeTimeline}>
+            <View style={styles.originDot} />
+            <View style={styles.routeLine} />
+            <View style={styles.destinationDot} />
+          </View>
+
+          <View style={styles.routeTexts}>
+            <Text style={styles.routeOrigin} numberOfLines={1}>
+              {carona.origem}
+            </Text>
+            <Text style={styles.routeDestination} numberOfLines={1}>
+              {carona.destino}
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.reservaDetails, { marginBottom: 15 }]}>
+          <View style={styles.detailItem}>
+            <Feather name="calendar" size={14} color="#64748B" />
+            <Text style={styles.detailText}>
+              {dataSaida ? dataSaida.toLocaleDateString('pt-BR') : '--/--/----'}
+            </Text>
+          </View>
+
+          <View style={styles.detailItem}>
+            <Feather name="clock" size={14} color="#64748B" />
+            <Text style={styles.detailText}>
+              {dataSaida
+                ? dataSaida.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                : '--:--'}
+            </Text>
+          </View>
+          
+          <View style={styles.detailItem}>
+            <FontAwesome name="money" size={14} color="#64748B" />
+            <Text style={styles.detailText}>
+              R$ {Number(carona.valorAjuda ?? 0).toFixed(2)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Passenger Requests Section */}
+        <View style={styles.requestsSection}>
+          <Text style={styles.requestsTitle}>Solicitações Recebidas ({requests.length})</Text>
+          
+          {requests.length === 0 ? (
+            <Text style={styles.noRequestsText}>Nenhuma solicitação recebida para esta carona.</Text>
+          ) : (
+            <View style={styles.requestsList}>
+              {requests.map((res: any) => {
+                const reqStatus = statusMap[res.status as ReservaStatus] ?? statusMap.PENDENTE;
+                const isPending = res.status === 'PENDENTE';
+                const passengerName = res.passageiro?.nome ?? 'Passageiro';
+                const passengerCourse = res.passageiro?.curso ?? 'Estudante';
+                const pInitials = passengerName.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase();
+
+                return (
+                  <View key={res.id} style={styles.requestItemCard}>
+                    <View style={styles.passengerRow}>
+                      <View style={styles.passengerAvatar}>
+                        <Text style={styles.passengerAvatarText}>{pInitials}</Text>
+                      </View>
+                      <View style={styles.passengerMeta}>
+                        <Text style={styles.passengerNameText} numberOfLines={1}>{passengerName}</Text>
+                        <Text style={styles.passengerSubText} numberOfLines={1}>{passengerCourse}</Text>
+                      </View>
+                      <View style={[styles.statusBadge, reqStatus.wrapper, { alignSelf: 'center', paddingHorizontal: 8, paddingVertical: 4 }]}>
+                        <Text style={[styles.statusText, reqStatus.text, { fontSize: 11 }]}>{reqStatus.label}</Text>
+                      </View>
+                    </View>
+
+                    {isPending ? (
+                      <View style={styles.actionButtonsRow}>
+                        {decidingReservaId === res.id ? (
+                          <ActivityIndicator size="small" color="#0A44B1" style={{ flex: 1, paddingVertical: 8 }} />
+                        ) : (
+                          <>
+                            <TouchableOpacity
+                              style={styles.approveButton}
+                              onPress={() => handleDecidirReserva(res.id, carona.id, 'CONFIRMADA')}
+                              activeOpacity={0.8}
+                            >
+                              <Feather name="check" size={14} color="#FFFFFF" />
+                              <Text style={styles.approveButtonText}>Aprovar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.rejectButton}
+                              onPress={() => handleDecidirReserva(res.id, carona.id, 'CANCELADA')}
+                              activeOpacity={0.8}
+                            >
+                              <Feather name="x" size={14} color="#FFFFFF" />
+                              <Text style={styles.rejectButtonText}>Recusar</Text>
+                            </TouchableOpacity>
+                          </>
+                        )}
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      </View>
+    );
   };
 
   const renderReserva = (reserva: Reserva) => {
@@ -369,31 +559,91 @@ const Perfil: React.FC = () => {
               </View>
             </View>
 
-            <TouchableOpacity style={styles.editButton} onPress={abrirModalEdicao} activeOpacity={0.82}>
-              <Feather name="edit-3" size={16} color="#475569" />
-              <Text style={styles.editButtonText}>Editar Informações</Text>
+            <View style={styles.profileActionsRow}>
+              <TouchableOpacity style={styles.editButton} onPress={abrirModalEdicao} activeOpacity={0.82}>
+                <Feather name="edit-3" size={16} color="#475569" />
+                <Text style={styles.editButtonText}>Editar Informações</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.logoutButton} onPress={signOut} activeOpacity={0.82}>
+                <Feather name="log-out" size={16} color="#EF4444" />
+                <Text style={styles.logoutButtonText}>Sair</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.tabsContainer}>
+            <TouchableOpacity
+              style={[styles.tabButton, activeTab === 'PASSAGEIRO' && styles.tabButtonActive]}
+              onPress={() => setActiveTab('PASSAGEIRO')}
+              activeOpacity={0.82}
+            >
+              <Feather name="user" size={16} color={activeTab === 'PASSAGEIRO' ? '#0A44B1' : '#64748B'} />
+              <Text style={[styles.tabButtonText, activeTab === 'PASSAGEIRO' && styles.tabButtonTextActive]}>
+                Como Passageiro
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabButton, activeTab === 'MOTORISTA' && styles.tabButtonActive]}
+              onPress={() => setActiveTab('MOTORISTA')}
+              activeOpacity={0.82}
+            >
+              <Feather name="navigation" size={16} color={activeTab === 'MOTORISTA' ? '#0A44B1' : '#64748B'} />
+              <Text style={[styles.tabButtonText, activeTab === 'MOTORISTA' && styles.tabButtonTextActive]}>
+                Como Motorista
+              </Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.sectionTitle}>Minhas Reservas</Text>
-
-          {reservas.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <View style={styles.emptyIcon}>
-                <Feather name="map-pin" size={25} color="#CBD5E1" />
-              </View>
-              <Text style={styles.emptyTitle}>Nenhuma reserva encontrada</Text>
-              <Text style={styles.emptyText}>
-                Você ainda não reservou nenhuma carona. Que tal buscar a sua primeira viagem?
-              </Text>
-              <TouchableOpacity style={styles.buscarButton} onPress={irParaCaronas} activeOpacity={0.82}>
-                <Text style={styles.buscarButtonText}>Buscar Caronas</Text>
-              </TouchableOpacity>
-            </View>
+          {activeTab === 'PASSAGEIRO' ? (
+            (() => {
+              const passageiroReservas = reservas.filter(
+                res => res.carona?.motoristaId !== user?.id && res.carona?.motorista?.id !== user?.id
+              );
+              if (passageiroReservas.length === 0) {
+                return (
+                  <View style={styles.emptyCard}>
+                    <View style={styles.emptyIcon}>
+                      <Feather name="map-pin" size={25} color="#CBD5E1" />
+                    </View>
+                    <Text style={styles.emptyTitle}>Nenhuma reserva encontrada</Text>
+                    <Text style={styles.emptyText}>
+                      Você ainda não reservou nenhuma carona. Que tal buscar a sua primeira viagem?
+                    </Text>
+                    <TouchableOpacity style={styles.buscarButton} onPress={irParaCaronas} activeOpacity={0.82}>
+                      <Text style={styles.buscarButtonText}>Buscar Caronas</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+              return (
+                <View style={[styles.reservasGrid, isTablet && styles.reservasGridWide]}>
+                  {passageiroReservas.map(renderReserva)}
+                </View>
+              );
+            })()
           ) : (
-            <View style={[styles.reservasGrid, isTablet && styles.reservasGridWide]}>
-              {reservas.map(renderReserva)}
-            </View>
+            loadingCaronas ? (
+              <ActivityIndicator size="large" color="#0A44B1" style={{ marginVertical: 32 }} />
+            ) : caronasOferecidas.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <View style={styles.emptyIcon}>
+                  <Feather name="navigation" size={25} color="#CBD5E1" />
+                </View>
+                <Text style={styles.emptyTitle}>Nenhuma carona oferecida</Text>
+                <Text style={styles.emptyText}>
+                  Você ainda não cadastrou nenhuma carona para oferecer. Toque no botão "Oferecer" na tela de Caronas para começar!
+                </Text>
+                <TouchableOpacity style={styles.buscarButton} onPress={irParaCaronas} activeOpacity={0.82}>
+                  <Text style={styles.buscarButtonText}>Oferecer Carona</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={[styles.reservasGrid, isTablet && styles.reservasGridWide]}>
+                {caronasOferecidas.map(renderCaronaOferecida)}
+              </View>
+            )
           )}
         </View>
       </ScrollView>
