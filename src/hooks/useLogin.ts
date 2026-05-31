@@ -32,8 +32,11 @@ export function useLogin(onSuccess?: () => void) {
 
     try {
       const response = await api.post('/auth/login', { email, senha: password });
-      console.log('Login realizado', response.data);
+      const { token } = response.data || {};
       const usuario = response.data?.usuario ?? response.data?.user ?? response.data;
+      if (token) {
+        await AsyncStorage.setItem('@unicarona_token', token);
+      }
       if (usuario?.id) {
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(usuario));
       }

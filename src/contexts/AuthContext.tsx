@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
       await AsyncStorage.removeItem(USER_STORAGE_KEY);
+      await AsyncStorage.removeItem('@unicarona_token');
       setIsAuthenticated(false);
     } catch (error) {
       console.error('Erro ao remover estado de autenticação', error);
