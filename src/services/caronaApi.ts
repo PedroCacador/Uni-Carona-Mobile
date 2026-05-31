@@ -1,4 +1,3 @@
-import { InternalAxiosRequestConfig, AxiosError } from 'axios';
 import api from './api';
 
 export interface CaronaFilters {
@@ -13,7 +12,6 @@ export interface CaronaFilters {
   vagasDisponiveis?: number;
 }
 
-// Enum para StatusCarona
 export enum StatusCarona {
   AGENDADA = 'AGENDADA',
   EM_ANDAMENTO = 'EM_ANDAMENTO',
@@ -21,7 +19,6 @@ export enum StatusCarona {
   CANCELADA = 'CANCELADA'
 }
 
-// Interfaces baseadas no backend
 export interface Usuario {
   id: string;
   nome: string;
@@ -97,15 +94,6 @@ export interface CaronaResponse {
   status: string;
 }
 
-// Interceptor para adicionar token de autenticação (se necessário)
-api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    return config;
-  },
-  (error: AxiosError) => {
-    return Promise.reject(error);
-  }
-);
 
 // Funções da API de Caronas
 export const caronaApi = {
@@ -113,7 +101,7 @@ export const caronaApi = {
     const response = await api.get<CaronaResponse[]>('/carona', { params: filters });
     return response.data;
   },
-  
+
   create: async (data: CreateCaronaDTO): Promise<Carona> => {
     const response = await api.post<Carona>('/carona', data);
     return response.data;

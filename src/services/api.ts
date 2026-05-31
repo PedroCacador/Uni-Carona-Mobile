@@ -1,11 +1,32 @@
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = 'http://10.0.0.166:3333';
+const rawUrl = process.env.EXPO_PUBLIC_API_URL || '192.168.18.12:3333';
+const BASE_URL = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+  ? rawUrl
+  : `http://${rawUrl}`;
 
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 10000,
 });
+
+api.interceptors.request.use(
+  async (config) => {
+    try {
+      const token = await AsyncStorage.getItem('@unicarona_token');
+      if (token && config.headers) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.error('Erro ao recuperar token do AsyncStorage', error);
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 export interface GeocodingResult {
   latitude: number;
