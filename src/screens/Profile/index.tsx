@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import api from '../../services/api';
+import authApi from '../../services/authApi';
 import { StatusCarona, type Carona, type Usuario } from '../../services/caronaApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { styles } from './styles';
@@ -244,7 +245,7 @@ const Perfil: React.FC = () => {
     setSalvandoEdicao(true);
     try {
       if (novaSenha) {
-        await api.post('/auth/login', { email: user.email, senha: senhaAtual });
+        await authApi.login({ email: user.email, senha: senhaAtual });
       }
 
       const payload: { nome: string; curso: string; senha?: string } = {

@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { LoginFormErrors } from '../types/auth';
 import { validateLoginForm } from '../utils/validation';
-import api from '../services/api';
+import authApi from '../services/authApi';
 
 const USER_STORAGE_KEY = '@unicarona_user';
 
@@ -31,9 +31,9 @@ export function useLogin(onSuccess?: () => void) {
     setIsLoading(true);
 
     try {
-      const response = await api.post('/auth/login', { email, senha: password });
-      const { token } = response.data || {};
-      const usuario = response.data?.usuario ?? response.data?.user ?? response.data;
+      const response = await authApi.login({ email, senha: password });
+      const { token } = response || {};
+      const usuario = response?.usuario;
       if (token) {
         await AsyncStorage.setItem('@unicarona_token', token);
       }
