@@ -6,10 +6,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const AUTH_STORAGE_KEY = '@unicarona_auth';
-const USER_STORAGE_KEY = '@unicarona_user';
+import localDatabase from '../services/localDatabase';
 
 interface AuthContextValue {
   isAuthenticated: boolean;
@@ -26,8 +23,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadAuth = async () => {
       try {
-        const storedAuth = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-        if (storedAuth === 'true') {
+        const storedAuth = await localDatabase.isAuthenticated();
+        if (storedAuth) {
           setIsAuthenticated(true);
         }
       } catch (error) {
@@ -41,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(async () => {
     try {
-      await AsyncStorage.setItem(AUTH_STORAGE_KEY, 'true');
+      await localDatabase.setAuthenticated(true);
       setIsAuthenticated(true);
     } catch (error) {
       console.error('Erro ao salvar estado de autenticação', error);
@@ -50,9 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
-      await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-      await AsyncStorage.removeItem(USER_STORAGE_KEY);
-      await AsyncStorage.removeItem('@unicarona_token');
+      await localDatabase.clearSession();
       setIsAuthenticated(false);
     } catch (error) {
       console.error('Erro ao remover estado de autenticação', error);

@@ -11,16 +11,14 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import api from '../../services/api';
 import authApi from '../../services/authApi';
 import { StatusCarona, type Carona, type Usuario } from '../../services/caronaApi';
 import { useAuth } from '../../contexts/AuthContext';
+import localDatabase from '../../services/localDatabase';
 import { styles } from './styles';
-
-const USER_STORAGE_KEY = '@unicarona_user';
 
 type ReservaStatus = 'CONFIRMADA' | 'PENDENTE' | 'CANCELADA';
 
@@ -146,14 +144,13 @@ const Perfil: React.FC = () => {
 
   const carregarPerfil = useCallback(async () => {
     try {
-      const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      const parsedUser = await localDatabase.getUser<PerfilUsuario>();
 
-      if (!storedUser) {
+      if (!parsedUser?.id) {
         setUser(null);
         return;
       }
 
-      const parsedUser = JSON.parse(storedUser) as PerfilUsuario;
       setUser(parsedUser);
       await Promise.all([
         carregarReservas(parsedUser.id),
@@ -259,7 +256,7 @@ const Perfil: React.FC = () => {
       const updatedUser = { ...user, ...response.data, ...payload };
 
       setUser(updatedUser);
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+      await localDatabase.setUser(updatedUser as Usuario);
       Alert.alert('Perfil atualizado!', 'Suas informações foram salvas com sucesso.');
       setEditModalAberto(false);
     } catch (error: any) {

@@ -11,7 +11,6 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 import CardCarona, { type Carona } from '../../components/CardCarona';
 import api, { mapsService } from '../../services/api';
@@ -21,10 +20,9 @@ import {
   type Carona as ApiCarona,
   type CaronaFilters,
 } from '../../services/caronaApi';
+import localDatabase from '../../services/localDatabase';
 import { styles } from './styles';
 import institutionsGeoJSON from '../../constants/muriae-institutions.json';
-
-const USER_STORAGE_KEY = '@unicarona_user';
 
 const ListagemCaronas: React.FC = () => {
   const { width } = useWindowDimensions();
@@ -140,9 +138,9 @@ const ListagemCaronas: React.FC = () => {
 
   useEffect(() => {
     const loadUser = async () => {
-      const userStr = await AsyncStorage.getItem(USER_STORAGE_KEY);
-      if (userStr) {
-        setCurrentUser(JSON.parse(userStr));
+      const user = await localDatabase.getUser();
+      if (user) {
+        setCurrentUser(user);
       }
     };
     loadUser();
@@ -165,13 +163,12 @@ const ListagemCaronas: React.FC = () => {
   const handleReservar = async () => {
     if (!selectedCarona) return;
 
-    const userStr = await AsyncStorage.getItem(USER_STORAGE_KEY);
-    if (!userStr) {
+    const user = await localDatabase.getUser();
+    if (!user) {
       Alert.alert('Login necessário', 'Você precisa estar logado para reservar uma carona.');
       return;
     }
 
-    const user = JSON.parse(userStr);
     const isOwnRide = selectedCarona.motorista.id === user.id;
     if (isOwnRide) {
       Alert.alert('Ação inválida', 'Você não pode reservar sua própria carona.');
@@ -320,13 +317,11 @@ const ListagemCaronas: React.FC = () => {
       return;
     }
 
-    const userStr = await AsyncStorage.getItem(USER_STORAGE_KEY);
-    if (!userStr) {
+    const user = await localDatabase.getUser();
+    if (!user) {
       Alert.alert('Login necessário', 'Você precisa estar logado para oferecer uma carona.');
       return;
     }
-
-    const user = JSON.parse(userStr);
 
     // Parse Date and Time
     const [day, month, year] = oferecerData.split('-');

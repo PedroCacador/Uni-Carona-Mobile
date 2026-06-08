@@ -1,10 +1,8 @@
 import { useCallback, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { LoginFormErrors } from '../types/auth';
 import { validateLoginForm } from '../utils/validation';
 import authApi from '../services/authApi';
-
-const USER_STORAGE_KEY = '@unicarona_user';
+import localDatabase from '../services/localDatabase';
 
 export function useLogin(onSuccess?: () => void) {
   const [email, setEmail] = useState('');
@@ -35,10 +33,10 @@ export function useLogin(onSuccess?: () => void) {
       const { token } = response || {};
       const usuario = response?.usuario;
       if (token) {
-        await AsyncStorage.setItem('@unicarona_token', token);
+        await localDatabase.setToken(token);
       }
       if (usuario?.id) {
-        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(usuario));
+        await localDatabase.setUser(usuario);
       }
       onSuccess?.();
     } catch (error: any) {

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import localDatabase from './localDatabase';
 
 const rawUrl = process.env.EXPO_PUBLIC_API_URL || '192.168.18.12:3333';
 const BASE_URL = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
@@ -14,12 +14,12 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     try {
-      const token = await AsyncStorage.getItem('@unicarona_token');
+      const token = await localDatabase.getToken();
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
     } catch (error) {
-      console.error('Erro ao recuperar token do AsyncStorage', error);
+      console.error('Erro ao recuperar token do banco local', error);
     }
     return config;
   },

@@ -3,7 +3,6 @@ import { View, ActivityIndicator, Alert, TextInput, FlatList, TouchableOpacity, 
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 
 import { theme } from '../../theme';
@@ -11,6 +10,7 @@ import { Typography } from '../../components/Typography';
 import { styles } from './styles';
 import api, { mapsService, RouteResult, GeocodingResult } from '../../services/api';
 import { caronaApi, StatusCarona } from '../../services/caronaApi';
+import localDatabase from '../../services/localDatabase';
 import institutionsGeoJSON from '../../constants/muriae-institutions.json';
 
 export default function MapScreen() {
@@ -35,9 +35,9 @@ export default function MapScreen() {
 
   useEffect(() => {
     (async () => {
-      const userStr = await AsyncStorage.getItem('@unicarona_user');
-      if (userStr) {
-        setCurrentUser(JSON.parse(userStr));
+      const user = await localDatabase.getUser();
+      if (user) {
+        setCurrentUser(user);
       }
 
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -184,13 +184,12 @@ export default function MapScreen() {
       return;
     }
 
-    const userStr = await AsyncStorage.getItem('@unicarona_user');
-    if (!userStr) {
+    const user = await localDatabase.getUser();
+    if (!user) {
       Alert.alert('Login necessário', 'Você precisa estar logado para solicitar uma carona.');
       return;
     }
 
-    const user = JSON.parse(userStr);
     const selectedRide = matchingRides.find(r => r.id === selectedRideId);
     const isOwnRide = selectedRide && (selectedRide.motoristaId === user.id || selectedRide.motorista?.id === user.id);
     if (selectedRide && isOwnRide) {
