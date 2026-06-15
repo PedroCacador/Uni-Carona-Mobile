@@ -25,7 +25,7 @@ export interface ValidarCodigoResponse {
 }
 
 export interface RedefinirSenhaDTO {
-  codigo: string;
+  token: string;
   novaSenha: string;
 }
 

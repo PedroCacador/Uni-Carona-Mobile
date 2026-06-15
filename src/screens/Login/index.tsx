@@ -80,7 +80,7 @@ export default function LoginScreen() {
 
         <Pressable
           style={styles.forgotLink}
-          onPress={() => console.log('Navegar para recuperação de senha')}
+          onPress={() => navigation.navigate('ForgotPassword')}
           accessibilityRole="link"
           accessibilityLabel="Esqueci minha senha"
           disabled={isLoading}

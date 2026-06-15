@@ -1,3 +1,5 @@
+export { AuthToast } from './AuthToast';
+export type { AuthToastProps, AuthToastType } from './AuthToast';
 export { AuthCheckbox } from './AuthCheckbox';
 export type { AuthCheckboxProps } from './AuthCheckbox';
 export { AuthHeroSection } from './AuthHeroSection';

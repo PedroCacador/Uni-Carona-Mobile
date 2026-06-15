@@ -1,8 +1,15 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
+import type {
+  ResetPasswordScreenParams,
+  VerifyCodeScreenParams,
+} from '../types/auth';
 
 export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
+  ForgotPassword: undefined;
+  VerifyCode: VerifyCodeScreenParams;
+  ResetPassword: ResetPasswordScreenParams;
 };
 
 export type MainTabParamList = {

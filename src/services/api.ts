@@ -1,10 +1,8 @@
 import axios from 'axios';
+import { resolveApiBaseUrl } from '../config/apiConfig';
 import localDatabase from './localDatabase';
 
-const rawUrl = process.env.EXPO_PUBLIC_API_URL || '192.168.18.12:3333';
-const BASE_URL = rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
-  ? rawUrl
-  : `http://${rawUrl}`;
+const BASE_URL = resolveApiBaseUrl();
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -25,7 +23,7 @@ api.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 export interface GeocodingResult {
@@ -41,7 +39,10 @@ export interface RouteResult {
 }
 
 export const mapsService = {
-  getRoute: async (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }): Promise<RouteResult> => {
+  getRoute: async (
+    origin: { lat: number; lng: number },
+    destination: { lat: number; lng: number },
+  ): Promise<RouteResult> => {
     const response = await api.get('/maps/route', {
       params: {
         originLat: origin.lat,
@@ -53,13 +54,18 @@ export const mapsService = {
     return response.data;
   },
 
-  searchPlaces: async (query: string, lat?: number, lon?: number, city?: string): Promise<GeocodingResult[]> => {
+  searchPlaces: async (
+    query: string,
+    lat?: number,
+    lon?: number,
+    city?: string,
+  ): Promise<GeocodingResult[]> => {
     const response = await api.get('/maps/search', {
-      params: { 
+      params: {
         q: query,
         lat,
         lon,
-        city
+        city,
       },
     });
     return response.data;
@@ -70,7 +76,7 @@ export const mapsService = {
       params: { address },
     });
     return response.data;
-  }
+  },
 };
 
 export default api;
